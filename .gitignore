@@ -1,0 +1,6 @@
+# Generated plots
+out/
+
+# Python
+__pycache__/
+*.pyc
