@@ -7,6 +7,10 @@ A runnable, deliberately minimal demonstration of the mechanics in
 that the hypothesis is true. See README.md for the full tour; this header keeps
 only the one equation and the rules for editing it.
 
+Pure Python standard library: no numpy, no matplotlib, nothing to install. The
+default output is ASCII; --plot writes self-contained SVG files (any browser
+opens them).
+
 The one moving part is g, the allocator's net gain on relevance, in (0, 1).
 high g = the flooding arm; low g = the collapse arm. Both arms are two readings
 of one variable. The whole model is one update rule run with different knobs:
@@ -31,6 +35,8 @@ returns -> bipolar, or the integrating coupling itself -> fragments, no return
 House rules if Claude Code edits this:
 - ASCII only. No em or en dashes, no curly quotes, no unicode math or block
   glyphs. Use straight quotes and the ASCII intensity ramp in RAMP.
+- Pure standard library. Do not reintroduce numpy, matplotlib, or any other
+  third-party dependency; keep it something that runs anywhere python does.
 - Keep it a toy: one file, one update rule, readable over clever. If a change
   needs a second mechanism, ask whether the existing knob can do it first.
 - Every knob stays mapped to a named setting in the paper (stability,
@@ -41,23 +47,61 @@ House rules if Claude Code edits this:
 """
 
 import argparse
-
-import numpy as np
+import math
+import os
+import random
 
 # ASCII intensity ramp, low to high. Used for every sparkline and heatmap so
-# the toy runs in a bare terminal with no plotting library.
+# the toy runs in a bare terminal with nothing to install.
 RAMP = " .:-=+*#%@"
+
+
+# ----------------------------------------------------------------------------
+# Small numeric helpers (standard library only)
+# ----------------------------------------------------------------------------
+
+def S(x):
+    """Logistic squash, written for numerical stability. Slope at the center is
+    0.25, which is why beta=4 is the fold: beta * 0.25 = 1 is the gain at which
+    one resting state splits."""
+    if x >= 0.0:
+        return 1.0 / (1.0 + math.exp(-x))
+    z = math.exp(x)
+    return z / (1.0 + z)
+
+
+def mean(xs):
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def pstdev(xs):
+    if not xs:
+        return 0.0
+    m = mean(xs)
+    return math.sqrt(sum((x - m) ** 2 for x in xs) / len(xs))
+
+
+def pearson(a, b):
+    """Pearson correlation of two equal-length sequences."""
+    n = len(a)
+    if n < 2:
+        return float("nan")
+    ma, mb = mean(a), mean(b)
+    num = sum((a[i] - ma) * (b[i] - mb) for i in range(n))
+    da = math.sqrt(sum((a[i] - ma) ** 2 for i in range(n)))
+    db = math.sqrt(sum((b[i] - mb) ** 2 for i in range(n)))
+    return num / (da * db) if da > 0.0 and db > 0.0 else float("nan")
+
+
+def linspace(a, b, n):
+    if n == 1:
+        return [a]
+    return [a + (b - a) * i / (n - 1) for i in range(n)]
 
 
 # ----------------------------------------------------------------------------
 # The one update rule
 # ----------------------------------------------------------------------------
-
-def S(x):
-    """Logistic squash. Slope at the center is 0.25, which is why beta=4 is
-    the fold: beta * 0.25 = 1 is the gain at which one resting state splits."""
-    return 1.0 / (1.0 + np.exp(-x))
-
 
 class Params:
     """The knobs. Each maps to a named setting in the paper (see module docs)."""
@@ -81,39 +125,39 @@ class Params:
 def simulate(p, T, n=1, drive=None, g0=None, a0=0.5, rng=None):
     """Integrate the update rule for time T with n channels.
 
-    Returns (t, g, a) where g has shape (steps, n) and a has shape (steps,).
-    drive, if given, is a function of time returning the external drive I;
-    otherwise the constant p.I is used.
+    Returns (t, g, a) where t is a list of times, g is a list of per-step lists
+    (one entry per channel), and a is a list of the slow variable. drive, if
+    given, is a function of time returning the external drive I; otherwise the
+    constant p.I is used.
     """
     steps = int(round(T / p.dt))
     if rng is None:
-        rng = np.random.default_rng(p.seed)
+        rng = random.Random(p.seed)
     if g0 is None:
-        g = np.full(n, 0.5)
+        g = [0.5] * n
+    elif isinstance(g0, (list, tuple)):
+        g = [float(x) for x in g0]
     else:
-        g = np.array(g0, dtype=float) * np.ones(n)
+        g = [float(g0)] * n
     a = float(a0)
 
-    out_g = np.zeros((steps, n))
-    out_a = np.zeros(steps)
-    t = np.arange(steps) * p.dt
-
+    out_g, out_a, t = [], [], []
     for s in range(steps):
         now = s * p.dt
         drv = p.I if drive is None else drive(now)
-        mean_g = g.mean()
-        coupling = p.c * (mean_g - g)
-        if p.noise > 0.0:
-            noise = p.noise * rng.standard_normal(n)
-        else:
-            noise = 0.0
-        x = p.beta * (g - 0.5) + drv - p.ka * (a - 0.5) + coupling + noise
-        g = g + p.dt * (-g + S(x)) / p.tau_g
+        mg = sum(g) / n
+        new_g = []
+        for gi in g:
+            x = p.beta * (gi - 0.5) + drv - p.ka * (a - 0.5) + p.c * (mg - gi)
+            if p.noise > 0.0:
+                x += p.noise * rng.gauss(0.0, 1.0)
+            new_g.append(gi + p.dt * (-gi + S(x)) / p.tau_g)
+        g = new_g
         if p.adapt:
-            a = a + p.dt * (mean_g - a) / p.tau_a
-        out_g[s] = g
-        out_a[s] = a
-
+            a = a + p.dt * (mg - a) / p.tau_a
+        out_g.append(g)
+        out_a.append(a)
+        t.append(now)
     return t, out_g, out_a
 
 
@@ -123,7 +167,7 @@ def settle(p, drive_value, g0, a0=0.5, T=80.0):
     q = Params(beta=p.beta, I=drive_value, ka=p.ka, c=p.c, adapt=p.adapt,
                noise=0.0, tau_g=p.tau_g, tau_a=p.tau_a, dt=p.dt)
     _, g, _ = simulate(q, T, n=1, g0=g0, a0=a0)
-    return g[-1, 0]
+    return g[-1][0]
 
 
 # ----------------------------------------------------------------------------
@@ -135,16 +179,19 @@ def fixed_points(beta, drive=0.0):
 
     Returns a list of (g, stable) pairs. Below beta=4 there is one; above it
     there are three (two stable arms and an unstable threshold between)."""
-    grid = np.linspace(1e-4, 1 - 1e-4, 4000)
-    h = S(beta * (grid - 0.5) + drive) - grid
+    grid = linspace(1e-4, 1 - 1e-4, 4000)
+
+    def h(g):
+        return S(beta * (g - 0.5) + drive) - g
+
+    hs = [h(g) for g in grid]
     roots = []
     for i in range(len(grid) - 1):
-        if h[i] == 0.0 or h[i] * h[i + 1] < 0.0:
+        if hs[i] == 0.0 or hs[i] * hs[i + 1] < 0.0:
             lo, hi = grid[i], grid[i + 1]
             for _ in range(60):
                 mid = 0.5 * (lo + hi)
-                hm = S(beta * (mid - 0.5) + drive) - mid
-                if (S(beta * (lo - 0.5) + drive) - lo) * hm <= 0.0:
+                if h(lo) * h(mid) <= 0.0:
                     hi = mid
                 else:
                     lo = mid
@@ -153,7 +200,6 @@ def fixed_points(beta, drive=0.0):
             sx = S(beta * (g - 0.5) + drive)
             slope = -1.0 + beta * sx * (1.0 - sx)
             roots.append((g, slope < 0.0))
-    # Deduplicate near-identical roots.
     out = []
     for g, st in roots:
         if not any(abs(g - g2) < 1e-3 for g2, _ in out):
@@ -162,69 +208,184 @@ def fixed_points(beta, drive=0.0):
 
 
 # ----------------------------------------------------------------------------
-# ASCII rendering (matplotlib is optional)
+# ASCII rendering
 # ----------------------------------------------------------------------------
 
 def sparkline(values, lo=None, hi=None):
     """One-line ASCII sparkline using the intensity ramp."""
-    v = np.asarray(values, dtype=float)
+    v = list(values)
     if lo is None:
-        lo = float(v.min())
+        lo = min(v)
     if hi is None:
-        hi = float(v.max())
+        hi = max(v)
     if hi - lo < 1e-12:
         hi = lo + 1e-12
-    idx = np.clip((v - lo) / (hi - lo), 0.0, 1.0)
-    idx = np.round(idx * (len(RAMP) - 1)).astype(int)
-    return "".join(RAMP[i] for i in idx)
+    out = []
+    for x in v:
+        f = (x - lo) / (hi - lo)
+        f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+        out.append(RAMP[int(round(f * (len(RAMP) - 1)))])
+    return "".join(out)
 
 
 def heatmap(matrix, lo=0.0, hi=1.0):
     """ASCII heatmap. Rows are channels, columns are time samples."""
-    m = np.asarray(matrix, dtype=float)
-    idx = np.clip((m - lo) / (hi - lo), 0.0, 1.0)
-    idx = np.round(idx * (len(RAMP) - 1)).astype(int)
     lines = []
-    for row in idx:
-        lines.append("|" + "".join(RAMP[i] for i in row) + "|")
+    for row in matrix:
+        chars = []
+        for x in row:
+            f = (x - lo) / (hi - lo)
+            f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+            chars.append(RAMP[int(round(f * (len(RAMP) - 1)))])
+        lines.append("|" + "".join(chars) + "|")
     return "\n".join(lines)
 
 
 def downsample(arr, width):
-    """Pick `width` evenly spaced samples from a 1D or 2D (time-major) array."""
-    arr = np.asarray(arr)
-    n = arr.shape[0]
+    """Pick `width` evenly spaced entries from a list."""
+    n = len(arr)
     if n <= width:
-        return arr
-    idx = np.linspace(0, n - 1, width).astype(int)
-    return arr[idx]
+        return list(arr)
+    idx = [int(round(i * (n - 1) / (width - 1))) for i in range(width)]
+    return [arr[i] for i in idx]
 
 
-def have_matplotlib():
-    try:
-        import matplotlib  # noqa: F401
-        return True
-    except Exception:
-        return False
+# ----------------------------------------------------------------------------
+# SVG plotting (self-contained; --plot writes plain-text SVG to out/)
+# ----------------------------------------------------------------------------
+
+PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+
+
+def _fmt(v):
+    if v == 0:
+        return "0"
+    if abs(v) >= 1000 or abs(v) < 0.001:
+        return "%.1e" % v
+    return "%.3g" % v
+
+
+def _svg_escape(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _svg_open(w, h):
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" '
+            'viewBox="0 0 %d %d" font-family="monospace" font-size="12">'
+            '<rect width="%d" height="%d" fill="white"/>' % (w, h, w, h, w, h))
+
+
+def _write_svg(name, parts):
+    os.makedirs("out", exist_ok=True)
+    path = "out/" + name + ".svg"
+    with open(path, "w") as f:
+        f.write("\n".join(parts) + "\n</svg>\n")
+    print("saved " + path)
+
+
+def save_svg_lines(name, title, xlabel, ylabel, series, markers=False, points=None):
+    """One or more line series on shared axes. series is a list of
+    (label, xs, ys). points, if given, is a list of (x, y, stable) markers."""
+    W, H = 680, 420
+    ml, mr, mt, mb = 64, 150, 44, 52
+    px0, px1, py0, py1 = ml, W - mr, H - mb, mt
+
+    xs_all = [x for _, xs, _ in series for x in xs]
+    ys_all = [y for _, _, ys in series for y in ys]
+    if points:
+        xs_all += [q[0] for q in points]
+        ys_all += [q[1] for q in points]
+    xmin, xmax = min(xs_all), max(xs_all)
+    ymin, ymax = min(ys_all), max(ys_all)
+    if xmax <= xmin:
+        xmax = xmin + 1.0
+    if ymax <= ymin:
+        ymax = ymin + 1.0
+    ymin -= 0.06 * (ymax - ymin)
+    ymax += 0.06 * (ymax - ymin)
+
+    def X(x):
+        return px0 + (x - xmin) / (xmax - xmin) * (px1 - px0)
+
+    def Y(y):
+        return py0 + (y - ymin) / (ymax - ymin) * (py1 - py0)
+
+    out = [_svg_open(W, H)]
+    out.append('<text x="%g" y="22" font-size="15">%s</text>' % (ml, _svg_escape(title)))
+    out.append('<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="black"/>' % (px0, py0, px1, py0))
+    out.append('<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="black"/>' % (px0, py0, px0, py1))
+    for i in range(6):
+        xv = xmin + (xmax - xmin) * i / 5
+        xp = X(xv)
+        out.append('<text x="%g" y="%g" text-anchor="middle" fill="#444">%s</text>'
+                   % (xp, py0 + 18, _fmt(xv)))
+        yv = ymin + (ymax - ymin) * i / 5
+        yp = Y(yv)
+        out.append('<text x="%g" y="%g" text-anchor="end" fill="#444">%s</text>'
+                   % (px0 - 8, yp + 4, _fmt(yv)))
+    out.append('<text x="%g" y="%g" text-anchor="middle">%s</text>'
+               % ((px0 + px1) / 2, H - 14, _svg_escape(xlabel)))
+    out.append('<text x="16" y="%g" transform="rotate(-90 16 %g)" text-anchor="middle">%s</text>'
+               % ((py0 + py1) / 2, (py0 + py1) / 2, _svg_escape(ylabel)))
+    for i, (label, xs, ys) in enumerate(series):
+        col = PALETTE[i % len(PALETTE)]
+        pts = " ".join("%.2f,%.2f" % (X(x), Y(y)) for x, y in zip(xs, ys))
+        out.append('<polyline fill="none" stroke="%s" stroke-width="1.6" points="%s"/>'
+                   % (col, pts))
+        if markers:
+            for x, y in zip(xs, ys):
+                out.append('<circle cx="%.2f" cy="%.2f" r="2.5" fill="%s"/>' % (X(x), Y(y), col))
+        ly = mt + 10 + i * 18
+        out.append('<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="%s" stroke-width="2.5"/>'
+                   % (px1 + 12, ly, px1 + 32, ly, col))
+        out.append('<text x="%g" y="%g">%s</text>' % (px1 + 38, ly + 4, _svg_escape(label)))
+    if points:
+        for x, y, stable in points:
+            col = "#2ca02c" if stable else "#d62728"
+            out.append('<circle cx="%.2f" cy="%.2f" r="4" fill="%s" stroke="black"/>'
+                       % (X(x), Y(y), col))
+    _write_svg(name, out)
+
+
+def _heat_rgb(f):
+    f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+    stops = [(0.0, (0, 0, 4)), (0.25, (81, 18, 124)), (0.5, (183, 55, 121)),
+             (0.75, (252, 137, 97)), (1.0, (252, 253, 191))]
+    for i in range(len(stops) - 1):
+        f0, c0 = stops[i]
+        f1, c1 = stops[i + 1]
+        if f <= f1:
+            t = (f - f0) / (f1 - f0) if f1 > f0 else 0.0
+            return "#%02x%02x%02x" % tuple(int(c0[j] + (c1[j] - c0[j]) * t) for j in range(3))
+    return "#fcfdbf"
+
+
+def save_svg_heatmap(name, title, matrix, vmin=0.0, vmax=1.0,
+                     xlabel="time", ylabel="channel"):
+    rows, cols = len(matrix), len(matrix[0])
+    W, H = 680, 360
+    ml, mr, mt, mb = 64, 24, 44, 50
+    pw, ph = W - ml - mr, H - mt - mb
+    cw, chh = pw / cols, ph / rows
+    out = [_svg_open(W, H)]
+    out.append('<text x="%g" y="22" font-size="15">%s</text>' % (ml, _svg_escape(title)))
+    for r in range(rows):
+        for cidx in range(cols):
+            f = (matrix[r][cidx] - vmin) / (vmax - vmin) if vmax > vmin else 0.0
+            x = ml + cidx * cw
+            y = mt + r * chh
+            out.append('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"/>'
+                       % (x, y, cw + 0.6, chh + 0.6, _heat_rgb(f)))
+    out.append('<text x="%g" y="%g" text-anchor="middle">%s</text>'
+               % (ml + pw / 2, H - 14, _svg_escape(xlabel)))
+    out.append('<text x="16" y="%g" transform="rotate(-90 16 %g)" text-anchor="middle">%s</text>'
+               % (mt + ph / 2, mt + ph / 2, _svg_escape(ylabel)))
+    _write_svg(name, out)
 
 
 def maybe_plot(args):
-    """True if the user asked for plots and matplotlib is available. Otherwise
-    the ASCII output already printed stands on its own."""
-    if not getattr(args, "plot", False):
-        return False
-    if not have_matplotlib():
-        print("  (--plot: matplotlib not installed; showing ASCII only)")
-        return False
-    return True
-
-
-def save_plot(fig, name):
-    import os
-    os.makedirs("out", exist_ok=True)
-    path = "out/" + name
-    fig.savefig(path, dpi=110, bbox_inches="tight")
-    print("saved " + path)
+    """SVG plotting is built in, so this is just whether the user asked for it."""
+    return bool(getattr(args, "plot", False))
 
 
 # ----------------------------------------------------------------------------
@@ -288,28 +449,20 @@ def cmd_fp(args):
         print("one resting state at 0.5: the loop slides, it does not snap.")
 
     if maybe_plot(args):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        g = np.linspace(0, 1, 400)
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.plot(g, S(p.beta * (g - 0.5)), label="S(beta*(g-0.5))")
-        ax.plot(g, g, "k--", lw=0.8, label="g")
-        for gx, stable in fps:
-            ax.plot(gx, gx, "o", color="C2" if stable else "C3")
-        ax.set_xlabel("g"); ax.set_ylabel("update")
-        ax.set_title("fixed points, beta = %.3g" % p.beta)
-        ax.legend()
-        save_plot(fig, "fp_beta%.3g.png" % p.beta)
+        grid = linspace(0.0, 1.0, 400)
+        curve = [S(p.beta * (g - 0.5)) for g in grid]
+        save_svg_lines("fp_beta%s" % _num(p.beta), "fixed points, beta = %s" % _num(p.beta),
+                       "g", "update",
+                       [("S(beta*(g-0.5))", grid, curve), ("g", grid, grid)],
+                       points=[(g, g, st) for g, st in fps])
 
 
 def cmd_sweep(args):
     """Reversible drive sweep. A folded loop takes a different path up than
     down (hysteresis); a sliding loop retraces itself."""
     p = resolve_params(args)
-    Imax = 4.0
-    n_pts = 161
-    ups = np.linspace(-Imax, Imax, n_pts)
+    Imax, n_pts = 4.0, 161
+    ups = linspace(-Imax, Imax, n_pts)
     downs = ups[::-1]
 
     g = settle(p, ups[0], g0=0.02)
@@ -317,18 +470,14 @@ def cmd_sweep(args):
     for drv in ups:
         g = settle(p, drv, g0=g)
         g_up.append(g)
-    g_up = np.array(g_up)
-
     g_down = []
     for drv in downs:
         g = settle(p, drv, g0=g)
         g_down.append(g)
-    g_down = np.array(g_down)
 
-    # Closed-loop area in the (I, g) plane via the shoelace formula.
-    xs = np.concatenate([ups, downs])
-    ys = np.concatenate([g_up, g_down])
-    area = 0.5 * abs(np.sum(xs * np.roll(ys, -1) - np.roll(xs, -1) * ys))
+    xs = ups + downs
+    ys = g_up + g_down
+    area = _loop_area(xs, ys)
 
     print("reversible drive sweep, beta = %.3g" % p.beta)
     print("  drive I from %.1f up to %.1f and back" % (-Imax, Imax))
@@ -341,59 +490,47 @@ def cmd_sweep(args):
     print("  down: " + sparkline(downsample(g_down, 60), 0.0, 1.0))
 
     if maybe_plot(args):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.plot(ups, g_up, label="up")
-        ax.plot(downs, g_down, label="down")
-        ax.set_xlabel("drive I"); ax.set_ylabel("g")
-        ax.set_title("sweep, beta = %.3g, area = %.2f" % (p.beta, area))
-        ax.legend()
-        save_plot(fig, "sweep_beta%.3g.png" % p.beta)
+        save_svg_lines("sweep_beta%s" % _num(p.beta),
+                       "sweep, beta = %s, area = %.2f" % (_num(p.beta), area),
+                       "drive I", "g", [("up", ups, g_up), ("down", downs, g_down)])
 
 
 def cmd_recover(args):
     """Critical slowing down. As beta approaches the fold, recovery from a
     nudge slows without bound and lag-1 autocorrelation climbs to 1."""
     p = resolve_params(args)
-    betas = np.array([1.0, 2.0, 3.0, 3.5, 3.8, 3.9, 3.95])
+    betas = [1.0, 2.0, 3.0, 3.5, 3.8, 3.9, 3.95]
     nudge = 0.1
     tol = 0.05 * nudge
     T_max = 600.0
 
     print("critical slowing down: recovery time and lag-1 autocorrelation")
     print("  beta      return time    AR(1)")
-    return_times = []
-    ar1s = []
+    return_times, ar1s = [], []
     for beta in betas:
         q = Params(beta=beta, tau_g=p.tau_g, dt=p.dt, noise=0.0)
-        # Deterministic recovery from a nudge off the resting state.
         _, g, _ = simulate(q, T_max, n=1, g0=0.5 + nudge)
-        dev = np.abs(g[:, 0] - 0.5)
-        back = np.where(dev < tol)[0]
-        rt = back[0] * q.dt if len(back) else T_max
+        rt = T_max
+        for s in range(len(g)):
+            if abs(g[s][0] - 0.5) < tol:
+                rt = s * q.dt
+                break
         return_times.append(rt)
-        # Stochastic run at the resting state for the autocorrelation.
+
         qn = Params(beta=beta, tau_g=p.tau_g, dt=p.dt, noise=0.01, seed=1)
         _, gn, _ = simulate(qn, 400.0, n=1, g0=0.5)
-        x = gn[1000:, 0] - 0.5
-        ar1 = float(np.corrcoef(x[:-1], x[1:])[0, 1])
+        x = [gn[s][0] - 0.5 for s in range(1000, len(gn))]
+        ar1 = pearson(x[:-1], x[1:])
         ar1s.append(ar1)
         print("  %-8.3g  %10.1f   %6.3f" % (beta, rt, ar1))
     print("  return time blows up and AR(1) -> 1 as beta -> 4: the tipping point.")
 
     if maybe_plot(args):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(1, 2, figsize=(9, 4))
-        ax[0].plot(betas, return_times, "o-")
-        ax[0].set_xlabel("beta"); ax[0].set_ylabel("return time")
-        ax[1].plot(betas, ar1s, "o-")
-        ax[1].set_xlabel("beta"); ax[1].set_ylabel("lag-1 autocorrelation")
-        fig.suptitle("critical slowing down approaching the fold")
-        save_plot(fig, "recover.png")
+        save_svg_lines("recover_return", "critical slowing: return time",
+                       "beta", "return time", [("return time", betas, return_times)],
+                       markers=True)
+        save_svg_lines("recover_ar1", "critical slowing: lag-1 autocorrelation",
+                       "beta", "AR(1)", [("AR(1)", betas, ar1s)], markers=True)
 
 
 def cmd_series(args):
@@ -404,7 +541,7 @@ def cmd_series(args):
         p.noise = 0.02
     T = 1000.0
     t, g, a = simulate(p, T, n=1, g0=0.5, a0=0.5)
-    mean_g = g[:, 0]
+    mean_g = [row[0] for row in g]
 
     # Pad the scale a little past [0,1] so a channel resting on the collapse
     # floor still shows as the lowest visible ramp char rather than blank.
@@ -413,10 +550,10 @@ def cmd_series(args):
     print("  g:  " + sparkline(downsample(mean_g, 70), -0.1, 1.1))
     if p.adapt and p.ka > 0:
         print("  a:  " + sparkline(downsample(a, 70), -0.1, 1.1))
-    # Count arm crossings through the unstable middle as a coarse swing count.
-    crossings = int(np.sum(np.diff((mean_g > 0.5).astype(int)) != 0))
+    crossings = sum(1 for i in range(len(mean_g) - 1)
+                    if (mean_g[i] > 0.5) != (mean_g[i + 1] > 0.5))
     print("  range %.2f to %.2f, crossings of the middle: %d"
-          % (mean_g.min(), mean_g.max(), crossings))
+          % (min(mean_g), max(mean_g), crossings))
     if p.ka >= 4 and p.beta > 4 and p.adapt:
         print("  a slow, coherent oscillation: the operating point cycles and returns.")
     elif p.beta > 4:
@@ -425,17 +562,12 @@ def cmd_series(args):
         print("  monostable: small wandering around the single resting state.")
 
     if maybe_plot(args):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(8, 3))
-        ax.plot(t, mean_g, lw=0.8, label="g")
+        series = [("g", t, mean_g)]
         if p.ka > 0:
-            ax.plot(t, a, lw=0.8, label="a (slow)")
-        ax.set_xlabel("time"); ax.set_ylabel("g"); ax.set_ylim(-0.02, 1.02)
-        ax.set_title("series, preset = %s" % getattr(args, "preset", None))
-        ax.legend()
-        save_plot(fig, "series_%s.png" % getattr(args, "preset", "custom"))
+            series.append(("a (slow)", t, a))
+        save_svg_lines("series_%s" % (getattr(args, "preset", None) or "custom"),
+                       "series, preset = %s" % getattr(args, "preset", None),
+                       "time", "g", series)
 
 
 def cmd_integration(args):
@@ -447,17 +579,18 @@ def cmd_integration(args):
         p.noise = 0.05
     n = 12
     T = 2000.0
-    t, g, a = simulate(p, T, n=n, g0=0.5, a0=0.5,
-                       rng=np.random.default_rng(p.seed))
+    t, g, a = simulate(p, T, n=n, g0=0.5, a0=0.5, rng=random.Random(p.seed))
 
     # Cross-channel spread: how far apart the channels sit, averaged over the
     # back half of the run (after any transient).
-    half = g.shape[0] // 2
-    spread = float(np.mean(np.std(g[half:], axis=1)))
+    half = len(g) // 2
+    spread = mean([pstdev(g[s]) for s in range(half, len(g))])
 
     print("integration across %d channels, preset = %s, c = %.3g"
           % (n, getattr(args, "preset", None), p.c))
-    print(heatmap(downsample(g, 60).T))
+    gd = downsample(g, 60)
+    mat = [[gd[s][ch] for s in range(len(gd))] for ch in range(n)]
+    print(heatmap(mat))
     print("  cross-channel spread = %.3f" % spread)
     if spread < 0.1:
         print("  one coherent field: the channels move together.")
@@ -465,16 +598,11 @@ def cmd_integration(args):
         print("  fragmented: the channels fall into different basins.")
 
     if maybe_plot(args):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(8, 3))
-        ax.imshow(g.T, aspect="auto", cmap="magma", vmin=0, vmax=1,
-                  extent=[0, T, 0, n])
-        ax.set_xlabel("time"); ax.set_ylabel("channel")
-        ax.set_title("integration, preset = %s, spread = %.3f"
-                     % (getattr(args, "preset", None), spread))
-        save_plot(fig, "integration_%s.png" % getattr(args, "preset", "custom"))
+        wide = downsample(g, 240)
+        mat2 = [[wide[s][ch] for s in range(len(wide))] for ch in range(n)]
+        save_svg_heatmap("integration_%s" % (getattr(args, "preset", None) or "custom"),
+                         "integration, preset = %s, spread = %.3f"
+                         % (getattr(args, "preset", None), spread), mat2)
 
 
 def cmd_profile(args):
@@ -489,25 +617,23 @@ def cmd_profile(args):
     preset = getattr(args, "preset", None)
 
     if preset == "autism" or (preset not in ("adhd",) and p.lam < 1.0):
-        # Autism: the autistic gain is stuck; a flexible gain would track the
-        # context-optimal precision. Mismatch = realized minus optimal.
-        vol = np.linspace(0.0, 1.0, 41)            # environmental volatility
+        vol = linspace(0.0, 1.0, 41)               # environmental volatility
         # The context calls for a drive that is high in stable settings and low
         # in volatile ones. A flexible allocator applies it in full; a stuck one
         # (low lam) applies only a fraction, so its gain barely moves with the
         # context. Both the optimal and the realized gain are read off the same
         # loop, so a fully flexible setting (lam=1) lands exactly on optimal.
-        drive_opt = 3.0 * (1.0 - 2.0 * vol)        # +3 when stable, -3 when volatile
-        g_opt = np.array([settle(p, d, g0=0.5) for d in drive_opt])
-        realized = np.array([settle(p, p.lam * d, g0=0.5) for d in drive_opt])
-        mismatch = realized - g_opt
+        drive_opt = [3.0 * (1.0 - 2.0 * v) for v in vol]   # +3 stable, -3 volatile
+        g_opt = [settle(p, d, g0=0.5) for d in drive_opt]
+        realized = [settle(p, p.lam * d, g0=0.5) for d in drive_opt]
+        mismatch = [realized[i] - g_opt[i] for i in range(len(vol))]
         print("autism profile: gain mismatch vs volatility, lam = %.3g" % p.lam)
         print("  volatility:  stable %s volatile" % ("-" * 50))
         print("  mismatch:    " + sparkline(downsample(mismatch, 50)))
         print("  mismatch spans %.2f to %.2f"
               " (negative = gain too low, collapse; positive = gain too high,"
-              " flooding)" % (mismatch.min(), mismatch.max()))
-        if mismatch.max() - mismatch.min() > 0.1:
+              " flooding)" % (min(mismatch), max(mismatch)))
+        if max(mismatch) - min(mismatch) > 0.1:
             print("  a stuck gain: too low in stable contexts, too high in"
                   " volatile ones, both at once.")
         else:
@@ -519,13 +645,9 @@ def cmd_profile(args):
         # ADHD: value of a reward falls with delay as 1/(1+k*d). Steep k makes
         # the immediate option outrank the delayed one. The allocator's weight
         # is the resting g under a drive set by that discounted value.
-        delay = np.linspace(0.0, 10.0, 41)
-        value = 1.0 / (1.0 + p.k * delay)
-        weight = []
-        for val in value:
-            drive = 4.0 * (val - 0.5)
-            weight.append(settle(p, drive, g0=0.5))
-        weight = np.array(weight)
+        delay = linspace(0.0, 10.0, 41)
+        value = [1.0 / (1.0 + p.k * d) for d in delay]
+        weight = [settle(p, 4.0 * (val - 0.5), g0=0.5) for val in value]
         print("adhd profile: weight vs reward delay, k = %.3g" % p.k)
         print("  delay:       now %s later" % ("-" * 52))
         print("  weight:      " + sparkline(downsample(weight, 50), 0.0, 1.0))
@@ -536,15 +658,8 @@ def cmd_profile(args):
         xs, ys, xlabel, ylabel, fname = delay, weight, "reward delay", "weight", "adhd"
 
     if maybe_plot(args):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.plot(xs, ys, "o-")
-        ax.axhline(0.5 if fname == "adhd" else 0.0, color="k", lw=0.6, ls="--")
-        ax.set_xlabel(xlabel); ax.set_ylabel(ylabel)
-        ax.set_title("%s profile" % fname)
-        save_plot(fig, "profile_%s.png" % fname)
+        save_svg_lines("profile_%s" % fname, "%s profile" % fname,
+                       xlabel, ylabel, [(ylabel, xs, ys)])
 
 
 def cmd_demo(args):
@@ -590,14 +705,24 @@ def cmd_demo(args):
     print()
     print("Run any of: fp, sweep, recover, series, integration, profile.")
     print("Add --preset {baseline,schizophrenia,bipolar,adhd,autism} and --plot.")
+    print("For how to use this and every variable described: allocator_toy.py guide.")
 
 
 # Small helpers reused by the demo so it stays a narration over the real runs.
 
+def _loop_area(xs, ys):
+    """Closed-loop area in the (x, y) plane via the shoelace formula."""
+    n = len(xs)
+    s = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        s += xs[i] * ys[j] - xs[j] * ys[i]
+    return 0.5 * abs(s)
+
+
 def _sweep_area(beta):
     p = Params(beta=beta)
-    Imax, n_pts = 4.0, 161
-    ups = np.linspace(-Imax, Imax, n_pts)
+    ups = linspace(-4.0, 4.0, 161)
     g = settle(p, ups[0], g0=0.02)
     g_up = []
     for drv in ups:
@@ -607,25 +732,24 @@ def _sweep_area(beta):
     for drv in ups[::-1]:
         g = settle(p, drv, g0=g)
         g_down.append(g)
-    xs = np.concatenate([ups, ups[::-1]])
-    ys = np.concatenate([g_up, g_down])
-    return 0.5 * abs(np.sum(xs * np.roll(ys, -1) - np.roll(xs, -1) * ys))
+    return _loop_area(ups + ups[::-1], g_up + g_down)
 
 
 def _return_time(beta):
     p = Params(beta=beta, noise=0.0)
     _, g, _ = simulate(p, 600.0, n=1, g0=0.6)
-    dev = np.abs(g[:, 0] - 0.5)
-    back = np.where(dev < 0.005)[0]
-    return back[0] * p.dt if len(back) else 600.0
+    for s in range(len(g)):
+        if abs(g[s][0] - 0.5) < 0.005:
+            return s * p.dt
+    return 600.0
 
 
 def _spread(preset):
     p = Params(**PRESETS[preset])
     p.noise = 0.05
-    _, g, _ = simulate(p, 2000.0, n=12, g0=0.5, rng=np.random.default_rng(0))
-    half = g.shape[0] // 2
-    return float(np.mean(np.std(g[half:], axis=1)))
+    _, g, _ = simulate(p, 2000.0, n=12, g0=0.5, rng=random.Random(0))
+    half = len(g) // 2
+    return mean([pstdev(g[s]) for s in range(half, len(g))])
 
 
 def _num(x):
@@ -648,7 +772,7 @@ def cmd_guide(args):
     print("It is not fitted to data and makes no claim that the hypothesis is")
     print("true; it lets you turn the knobs and watch a malfunction and a")
     print("miscalibration behave differently for reasons you can see in one")
-    print("equation.")
+    print("equation. Pure Python standard library: nothing to install.")
     print()
     print("Run a command, optionally with a preset and knob overrides:")
     print()
@@ -725,8 +849,8 @@ def cmd_guide(args):
     print(fmt % ("--seed", _num(d.seed), "random seed, so runs are reproducible."))
     print(fmt % ("--dt", _num(d.dt), "integration time step (Euler)."))
     print(fmt % ("--plot", "off",
-                 "also save matplotlib PNGs to out/. The ASCII output"))
-    print("                         always prints; --plot is an extra.")
+                 "also write SVG plots to out/ (any browser opens"))
+    print("                         them; no libraries). The ASCII output always prints.")
     print()
     print("  tau_g=%s and tau_a=%s, the fast and slow timescales, are fixed in the file."
           % (_num(d.tau_g), _num(d.tau_a)))
@@ -768,7 +892,7 @@ def cmd_guide(args):
     print("               oddly; the output holds a fixed offset and never switches.")
     print()
     print("Output is ASCII sparklines and heatmaps by default, so it runs in a bare")
-    print("terminal. The model needs numpy; matplotlib is only used if you pass --plot.")
+    print("terminal. Nothing to install: pure standard library, and --plot writes SVG.")
 
 
 # ----------------------------------------------------------------------------
@@ -802,7 +926,7 @@ def build_parser():
         sp.add_argument("--seed", type=int, help="random seed")
         sp.add_argument("--dt", type=float, help="integration step")
         sp.add_argument("--plot", action="store_true",
-                        help="also save PNGs to out/ if matplotlib is installed")
+                        help="also write self-contained SVG plots to out/")
 
     for name, fn in (("demo", cmd_demo), ("guide", cmd_guide), ("fp", cmd_fp),
                      ("sweep", cmd_sweep), ("recover", cmd_recover),

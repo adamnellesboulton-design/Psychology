@@ -5,7 +5,8 @@ Two Kinds of Fault." This is a sandbox for the dynamics, not a claim that the
 hypothesis is true. The point is to let someone turn the knobs and watch a malfunction
 and a miscalibration behave differently for reasons you can see in one equation.
 
-Everything lives in `allocator_toy.py` (pure numpy; matplotlib optional). Start with
+Everything lives in `allocator_toy.py`. It is pure Python standard library:
+nothing to install, no numpy, no matplotlib. Start with
 `python allocator_toy.py demo`.
 
 ## The one moving part
@@ -82,9 +83,9 @@ destabilizes:
     python allocator_toy.py profile --preset adhd     # weight vs reward delay, two arms
     python allocator_toy.py profile --preset autism   # gain mismatch vs volatility, two arms
 
-Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. Add `--plot` to
-save PNGs to `out/` if matplotlib is installed; otherwise output is ASCII sparklines
-in the terminal.
+Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. By default the
+output is ASCII sparklines and heatmaps in the terminal. Add `--plot` to also write
+self-contained SVG files to `out/` (any browser opens them; no libraries needed).
 
 ## What the model is demonstrating (and what you should see)
 
@@ -127,9 +128,9 @@ in the terminal.
 
 ## Files
 
-    allocator_toy.py   the whole model and CLI: the update rule, seven commands,
-                       ASCII rendering, and optional matplotlib plots. Pure numpy
-                       for the model itself; matplotlib only if you pass --plot.
+    allocator_toy.py   the whole model and CLI: the update rule, eight commands,
+                       ASCII rendering, and a built-in SVG plotter. Pure Python
+                       standard library; runs anywhere python does, no installs.
 
 ## House rules if Claude Code edits this
 
