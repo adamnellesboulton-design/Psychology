@@ -35,8 +35,10 @@ integration experiment).
            two arms) with an unstable threshold between them. beta=4 is the
            tipping point.
     I      external drive: stress, a salient input, a dopaminergic fluctuation.
-    ka     strength of the slow adaptation a. With a folded loop, ka>4 turns the
-           system into a relaxation oscillator (builds, switches, relaxes back).
+    ka     strength of the slow variable a, "the bar": the level of relevance the
+           regulator demands before it admits a bid. With a folded loop, ka>4 turns
+           the system into a relaxation oscillator (the bar drifts up under the
+           flood until it tips, then back down: the bipolar mechanism).
     c      integration coupling across channels: the single weighting laid over
            the whole contest. High c keeps the field one coherent thing; low c
            lets the channels fall into different basins (fragmentation).
@@ -67,6 +69,7 @@ destabilizes:
 
 ## Run it
 
+    python allocator_toy.py app                       # a browser UI with a slider for every knob
     python allocator_toy.py demo                      # the whole contrast, narrated
     python allocator_toy.py guide                     # how to use it, and every variable described
     python allocator_toy.py fp --beta 8               # stable fixed points (two arms appear past beta=4)
@@ -87,6 +90,15 @@ Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. By default th
 output is ASCII sparklines and heatmaps in the terminal. Add `--plot` to also write
 self-contained SVG files to `out/` (any browser opens them; no libraries needed).
 
+## Browser UI
+
+`python allocator_toy.py app` serves a small single-page UI on localhost (it opens
+your browser, or pass `--no-browser` and visit the printed URL). It has a slider for
+every knob, a preset menu, and a view switch (fixed points, sweep, recover, series,
+integration, the two profiles); move a slider and the model reruns, redrawing the
+plot and the narration. Like everything else it is pure standard library, served by
+Python's built-in `http.server`: nothing to install.
+
 ## What the model is demonstrating (and what you should see)
 
 - One number, `beta`, sorts the kinds of fault. `fp` shows beta=2 has a single
@@ -97,14 +109,20 @@ self-contained SVG files to `out/` (any browser opens them; no libraries needed)
   beta=2 they lie on top of each other (area ~ 0). The malfunction's state depends
   on where it has been; the miscalibration's does not.
 - Approaching the fold, recovery from a nudge slows without bound. `recover` shows
-  return time climbing from about 3 to over 160 time units and lag-1 autocorrelation
-  rising to 1.00 as beta goes from 1 to 3.95. That is the critical-slowing signature,
-  and it is measurable without watching the system switch.
+  return time climbing from about 3 to over 160 time units, and the variance and
+  lag-1 autocorrelation of the fluctuations both climbing (autocorrelation rising to
+  1.00) as beta goes from 1 to 3.95. That is the critical-slowing signature, and it
+  is measurable without watching the system switch. Critical slowing is a fold
+  signature specifically: it belongs to bipolar disorder and to the onset of
+  psychosis, not to the established, fragmented schizophrenic state (which is chaos,
+  not a fold, and does not slow).
 - The two malfunctions differ by which variable folds. `series --preset bipolar`
   is a slow recurrent oscillation; `integration --preset bipolar` keeps all channels
   synchronized (cross-channel spread ~ 0): one coherent field that returns each cycle.
   `integration --preset schizophrenia` lets the channels scatter into different basins
-  (spread ~ 0.45) and stay there: no single field, no return.
+  (spread ~ 0.45) and stay there: no single field, no return. That fragmentation is
+  the established schizophrenic state; its signature is the lost integration itself,
+  not an approach to a tipping point.
 - The miscalibrations never switch. `profile --preset adhd` is a fixed curve, weight
   piled on the immediate option and starved from the delayed one, both at once.
   `profile --preset autism` is a fixed mismatch that is positive (gain too high,
