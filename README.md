@@ -67,6 +67,7 @@ destabilizes:
 ## Run it
 
     python allocator_toy.py demo                      # the whole contrast, narrated
+    python allocator_toy.py guide                     # how to use it, and every variable described
     python allocator_toy.py fp --beta 8               # stable fixed points (two arms appear past beta=4)
 
     python allocator_toy.py sweep --beta 8            # reversible drive sweep: hysteresis loop, area ~ 2.1

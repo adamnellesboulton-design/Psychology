@@ -628,35 +628,190 @@ def _spread(preset):
     return float(np.mean(np.std(g[half:], axis=1)))
 
 
+def _num(x):
+    """Render a default as a short, plain string for the guide table."""
+    if isinstance(x, float) and x == int(x):
+        return str(int(x))
+    return str(x)
+
+
+def cmd_guide(args):
+    """How to use this model, with a description of every variable."""
+    d = Params()  # defaults are read off a fresh Params so they cannot drift
+    line = "-" * 70
+
+    print("=" * 70)
+    print("ALLOCATOR TOY MODEL: HOW TO USE IT")
+    print("=" * 70)
+    print()
+    print("A sandbox for the mechanics in 'One Allocator, Two Kinds of Fault.'")
+    print("It is not fitted to data and makes no claim that the hypothesis is")
+    print("true; it lets you turn the knobs and watch a malfunction and a")
+    print("miscalibration behave differently for reasons you can see in one")
+    print("equation.")
+    print()
+    print("Run a command, optionally with a preset and knob overrides:")
+    print()
+    print("    python allocator_toy.py <command> [--preset NAME] [--knob VALUE] [--plot]")
+    print()
+    print("Good first runs:")
+    print("    python allocator_toy.py demo                 # the whole contrast, narrated")
+    print("    python allocator_toy.py fp --beta 8          # the loop folds into two arms")
+    print("    python allocator_toy.py series --preset bipolar")
+    print("    python allocator_toy.py <command> -h         # full help for one command")
+    print()
+
+    print(line)
+    print("THE ONE UPDATE RULE  (every command is this, run with different knobs)")
+    print(line)
+    print()
+    print("  dg_i/dt = ( -g_i + S( beta*(g_i-0.5) + I - ka*(a-0.5)")
+    print("                        + c*(mean(g)-g_i) + noise_i ) ) / tau_g")
+    print("  da/dt   = ( mean(g) - a ) / tau_a     # slow; only the oscillator uses it")
+    print()
+    print("  g   the allocator's net gain on relevance, in (0,1). This is the one")
+    print("      moving part. high g = flooding arm (grips too hard, world too loud);")
+    print("      low g = collapse arm (lets go, world goes flat). The two arms are")
+    print("      two readings of one variable, not two faults.")
+    print("  S   the logistic squash. Its slope at the center is 0.25, which is why")
+    print("      beta=4 (where beta*0.25 = 1) is the tipping point.")
+    print("  a   a slow, lagging average of g. It only bites when ka > 0, and it is")
+    print("      what turns a folded loop into an oscillator instead of a stuck snap.")
+    print("  i   the channel index: 1 channel by default, 12 for `integration`.")
+    print()
+
+    print(line)
+    print("THE KNOBS  (each stands for a named setting in the paper)")
+    print(line)
+    print()
+    fmt = "  %-8s default %-5s %s"
+    print(fmt % ("--beta", _num(d.beta),
+                 "STABILITY setting (loop gain). The master switch for the"))
+    print("                         kind of fault. beta<4: one resting state, the")
+    print("                         output slides. beta>4: the loop folds into two")
+    print("                         arms with an unstable threshold between; it snaps.")
+    print(fmt % ("--I", _num(d.I),
+                 "external drive: stress, a salient input, a dopaminergic"))
+    print("                         fluctuation. Shifts the contest one way or other.")
+    print(fmt % ("--ka", _num(d.ka),
+                 "strength of the slow adaptation a. With a folded loop,"))
+    print("                         ka>4 makes a relaxation oscillator (builds,")
+    print("                         switches, relaxes back): the bipolar mechanism.")
+    print(fmt % ("--c", _num(d.c),
+                 "INTEGRATION coupling across channels. High c keeps the"))
+    print("                         field one coherent thing (bipolar-type); low c")
+    print("                         lets channels fall into separate basins")
+    print("                         (fragmentation, schizophrenia-type).")
+    print(fmt % ("--k", _num(d.k),
+                 "DISCOUNT steepness (the ADHD target). Used by `profile`."))
+    print("                         Steep k makes the immediate reward outrank the")
+    print("                         delayed one: weight piled on now, starved from later.")
+    print(fmt % ("--lam", _num(d.lam),
+                 "FLEXIBILITY (the autism target). Used by `profile`. Low"))
+    print("                         lam = a gain that is stuck and will not track the")
+    print("                         volatility of the context: too high here, too low there.")
+    print(fmt % ("--adapt", "1",
+                 "engage the slow variable a (1 on, 0 frozen at 0.5). Turn"))
+    print("                         it off to see a folded loop snap instead of cycle.")
+    print()
+
+    print(line)
+    print("NUMERICAL SETTINGS  (the simulation, not the hypothesis)")
+    print(line)
+    print()
+    print(fmt % ("--noise", _num(d.noise),
+                 "noise amplitude inside the squash. series and"))
+    print("                         integration set their own when you do not pass it.")
+    print(fmt % ("--seed", _num(d.seed), "random seed, so runs are reproducible."))
+    print(fmt % ("--dt", _num(d.dt), "integration time step (Euler)."))
+    print(fmt % ("--plot", "off",
+                 "also save matplotlib PNGs to out/. The ASCII output"))
+    print("                         always prints; --plot is an extra.")
+    print()
+    print("  tau_g=%s and tau_a=%s, the fast and slow timescales, are fixed in the file."
+          % (_num(d.tau_g), _num(d.tau_a)))
+    print()
+
+    print(line)
+    print("THE PRESETS  (the four conditions, plus a baseline)")
+    print(line)
+    print()
+    print("  baseline       beta=2                monostable; slides, recovers fast")
+    print("  schizophrenia  beta=8, c=0.2         folded loop, integration failed;")
+    print("                                       fragments, no return")
+    print("  bipolar        beta=8, c=3, ka=6     folded loop, integration intact;")
+    print("                                       slow coherent oscillation")
+    print("  adhd           beta=2, k=0.95        monostable, steep target;")
+    print("                                       two-armed over reward delay")
+    print("  autism         beta=2, lam=0.1       monostable, stuck target;")
+    print("                                       two-armed over volatility")
+    print()
+    print("  A preset just sets some knobs; any of them can be overridden on top,")
+    print("  so you can mix faults (e.g. a miscalibrated target on an unstable loop).")
+    print()
+
+    print(line)
+    print("THE COMMANDS  (each reproduces a signature from the paper)")
+    print(line)
+    print()
+    print("  demo          the whole contrast, narrated over real runs")
+    print("  guide         this page")
+    print("  fp            stable resting states (two arms appear past beta=4)")
+    print("  sweep         reversible drive sweep: hysteresis if the loop has folded")
+    print("  recover       critical slowing: recovery time and autocorrelation vs beta")
+    print("  series        time series of the field for a preset")
+    print("  integration   12 channels: one coherent field, or fragmented basins")
+    print("  profile       the miscalibrations: a fixed two-armed curve, never switches")
+    print()
+    print("MALFUNCTION  = the loop loses stability (raise beta past 4); the output moves.")
+    print("MISCALIBRATION = the loop is fine (beta low) but a target (k or lam) is set")
+    print("               oddly; the output holds a fixed offset and never switches.")
+    print()
+    print("Output is ASCII sparklines and heatmaps by default, so it runs in a bare")
+    print("terminal. The model needs numpy; matplotlib is only used if you pass --plot.")
+
+
 # ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Allocator toy model: one update rule, two kinds of fault.")
-    sub = parser.add_subparsers(dest="command")
+        prog="allocator_toy.py",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Allocator toy model: one update rule, two kinds of fault.",
+        epilog="Run 'allocator_toy.py guide' for how-to-use and a description of\n"
+               "every variable, or '<command> -h' for help on one command.")
+    sub = parser.add_subparsers(dest="command", metavar="command")
 
     def add_common(sp):
-        sp.add_argument("--preset", choices=list(PRESETS.keys()))
-        sp.add_argument("--beta", type=float, help="stability setting (loop gain)")
-        sp.add_argument("--I", type=float, help="external drive")
-        sp.add_argument("--ka", type=float, help="strength of slow adaptation")
-        sp.add_argument("--c", type=float, help="integration coupling")
-        sp.add_argument("--k", type=float, help="discount steepness (ADHD)")
-        sp.add_argument("--lam", type=float, help="flexibility (autism)")
+        sp.add_argument("--preset", choices=list(PRESETS.keys()),
+                        help="one of the four conditions, plus baseline")
+        sp.add_argument("--beta", type=float,
+                        help="stability setting / loop gain (fold at beta=4)")
+        sp.add_argument("--I", type=float, help="external drive (stress, salient input)")
+        sp.add_argument("--ka", type=float,
+                        help="strength of slow adaptation (ka>4 oscillates a folded loop)")
+        sp.add_argument("--c", type=float,
+                        help="integration coupling across channels (high coheres, low fragments)")
+        sp.add_argument("--k", type=float, help="temporal discount steepness (ADHD target)")
+        sp.add_argument("--lam", type=float, help="flexibility (autism target)")
         sp.add_argument("--adapt", type=int, choices=(0, 1),
-                        help="engage the slow adaptation a (default on)")
-        sp.add_argument("--noise", type=float, help="noise amplitude")
+                        help="engage the slow variable a (1 on, 0 frozen; default on)")
+        sp.add_argument("--noise", type=float, help="noise amplitude inside the squash")
         sp.add_argument("--seed", type=int, help="random seed")
         sp.add_argument("--dt", type=float, help="integration step")
         sp.add_argument("--plot", action="store_true",
-                        help="save PNGs to out/ if matplotlib is installed")
+                        help="also save PNGs to out/ if matplotlib is installed")
 
-    for name, fn in (("demo", cmd_demo), ("fp", cmd_fp), ("sweep", cmd_sweep),
-                     ("recover", cmd_recover), ("series", cmd_series),
-                     ("integration", cmd_integration), ("profile", cmd_profile)):
-        sp = sub.add_parser(name, help=fn.__doc__.splitlines()[0] if fn.__doc__ else name)
+    for name, fn in (("demo", cmd_demo), ("guide", cmd_guide), ("fp", cmd_fp),
+                     ("sweep", cmd_sweep), ("recover", cmd_recover),
+                     ("series", cmd_series), ("integration", cmd_integration),
+                     ("profile", cmd_profile)):
+        doc = fn.__doc__ or name
+        sp = sub.add_parser(name, help=doc.splitlines()[0],
+                            description=doc,
+                            formatter_class=argparse.RawDescriptionHelpFormatter)
         add_common(sp)
         sp.set_defaults(func=fn)
 
@@ -667,7 +822,11 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "command", None):
-        cmd_demo(args if hasattr(args, "plot") else argparse.Namespace(plot=False))
+        # Bare invocation: narrate the contrast, then point at the guide.
+        cmd_demo(argparse.Namespace(plot=False))
+        print()
+        print("New here? Run 'python allocator_toy.py guide' for how to use this")
+        print("and what every variable means.")
         return
     args.func(args)
 
