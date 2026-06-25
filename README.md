@@ -114,9 +114,15 @@ The page is fully static, so GitHub Pages can host it as-is. A workflow at
 `.github/workflows/pages.yml` publishes the `docs/` folder automatically on every
 push. To turn it on once: in the repository, go to Settings > Pages > Build and
 deployment, and set Source to "GitHub Actions". After that, pushes to the default
-branch redeploy the site, and the live URL runs entirely in the visitor's browser
-(no server). If you prefer no workflow, you can instead set Source to "Deploy from a
-branch" and point it at the default branch with the `/docs` folder.
+branch redeploy the site.
+
+There is no port and nothing to boot: Pages serves the files over HTTPS, and the
+app runs entirely in the visitor's browser. The live URL opens straight into the
+app -- the workflow publishes `docs/` as the site root, and a small redirect at the
+repository root (`index.html`) forwards into the app as well, so the site lands on
+it however Pages is configured (Actions, "Deploy from a branch" with `/docs`, or
+with the repository root). The port-based version is the local `app` command above;
+the hosted site needs none.
 
 ## What the model is demonstrating (and what you should see)
 
