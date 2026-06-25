@@ -37,7 +37,9 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;}
 #plots{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;min-height:120px;}
 #plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
-pre#text{background:#0f1117;color:#d7dae0;border-radius:12px;padding:14px;font-size:12px;line-height:1.4;overflow:auto;white-space:pre;margin:0;}
+#text{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:0;}
+#text .t{font-size:16px;font-weight:700;margin-bottom:8px;}
+#text .b{font-size:14px;line-height:1.6;color:#33333b;white-space:pre-wrap;}
 footer{padding:6px 24px 26px;color:var(--muted);font-size:12px;}
 footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
 </style>
@@ -73,7 +75,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
   </section>
   <section id="out">
     <div id="plots"></div>
-    <pre id="text">loading...</pre>
+    <div id="text"></div>
   </section>
 </main>
 <footer>
@@ -85,8 +87,6 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
 "use strict";
 
 // ---- model (a faithful port of allocator_toy.py) --------------------------
-
-var RAMP = " .:-=+*#%@";
 
 function S(x){ if(x >= 0){ return 1/(1+Math.exp(-x)); } var z = Math.exp(x); return z/(1+z); }
 function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s/a.length; }
@@ -185,27 +185,9 @@ function loopArea(xs, ys){
   return 0.5*Math.abs(s);
 }
 
-// ---- ASCII rendering ------------------------------------------------------
+// ---- helpers --------------------------------------------------------------
 
 function clamp01(f){ return f<0 ? 0 : (f>1 ? 1 : f); }
-function sparkline(values, lo, hi){
-  if(lo == null) lo = Math.min.apply(null, values);
-  if(hi == null) hi = Math.max.apply(null, values);
-  if(hi - lo < 1e-12) hi = lo + 1e-12;
-  var out = "";
-  for(var i=0;i<values.length;i++){
-    out += RAMP[Math.round(clamp01((values[i]-lo)/(hi-lo))*(RAMP.length-1))];
-  }
-  return out;
-}
-function heatmapAscii(matrix, lo, hi){
-  lo = (lo==null)?0:lo; hi = (hi==null)?1:hi;
-  return matrix.map(function(row){
-    var s = "";
-    for(var i=0;i<row.length;i++){ s += RAMP[Math.round(clamp01((row[i]-lo)/(hi-lo))*(RAMP.length-1))]; }
-    return "|" + s + "|";
-  }).join("\n");
-}
 function downsample(arr, width){
   var n = arr.length;
   if(n <= width) return arr.slice();
@@ -308,25 +290,33 @@ function svgHeatmap(title, matrix){
 
 function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
 
+// Each view returns {svgs, title, body}: a friendly heading and a plain-language
+// reading of what the picture means. The point is a feel for the model, so the
+// text leans on the model's own ideas (flooding, collapse, snap vs slide, swing,
+// fragment) and skips the math (g, beta, hysteresis area, autocorrelation).
+
 function viewFp(p){
   var fps = fixedPoints(p.beta);
-  var L = ["fixed points of the single-channel loop, beta = " + g3(p.beta),
-           "  (beta=4 is the fold; below it one resting state, above it two)"];
-  fps.forEach(function(f){
-    var g=f[0], stable=f[1], arm="";
-    if(stable && g>0.6) arm="  <- flooding arm";
-    else if(stable && g<0.4) arm="  <- collapse arm";
-    L.push("  g* = " + g.toFixed(4) + "   " + (stable?"stable  ":"unstable") + arm);
-  });
   var nStable = fps.filter(function(f){ return f[1]; }).length;
-  L.push(nStable>=2 ? "two arms: the loop has folded."
-                    : "one resting state at 0.5: the loop slides, it does not snap.");
   var grid = linspace(0,1,400);
   var curve = grid.map(function(g){ return S(p.beta*(g-0.5)); });
-  var svg = svgLines("fixed points, beta = "+g3(p.beta), "g", "update",
-    [{label:"S(beta*(g-0.5))", xs:grid, ys:curve}, {label:"g", xs:grid, ys:grid}],
+  var svg = svgLines("Where the allocator can settle",
+    "its state:  collapsed  <-------->  flooded", "where it moves next",
+    [{label:"next state", xs:grid, ys:curve}, {label:"stays put", xs:grid, ys:grid}],
     {points: fps.map(function(f){ return [f[0], f[0], f[1]]; })});
-  return {svgs:[svg], text:L.join("\n")};
+  var body = (nStable >= 2)
+    ? "The dial has folded into two resting places (the green dots): one "
+      + "flooded, where everything feels urgent and over-connected, and one "
+      + "collapsed, where nothing lands and the world goes flat. Between them "
+      + "is only an unstable tipping point (red), so there is no calm middle to "
+      + "rest in -- the allocator falls into one extreme or the other and stays.\n\n"
+      + "You got here by turning self-reinforcement up past the fold. Turn it "
+      + "back down and the two resting places merge into one."
+    : "There is a single resting place, right in the middle (the green dot). "
+      + "Nudge the allocator and it drifts back to it. It can lean a bit flooded "
+      + "or a bit collapsed, but it slides there smoothly -- there is no hard "
+      + "line to fall over, and no extreme to get stuck in.";
+  return {svgs:[svg], title:"Where the allocator settles", body:body};
 }
 
 function viewSweep(p){
@@ -335,23 +325,28 @@ function viewSweep(p){
   var g = settle(p, ups[0], 0.02), gUp=[], gDown=[];
   ups.forEach(function(d){ g = settle(p, d, g); gUp.push(g); });
   downs.forEach(function(d){ g = settle(p, d, g); gDown.push(g); });
-  var area = loopArea(ups.concat(downs), gUp.concat(gDown));
-  var L = ["reversible drive sweep, beta = " + g3(p.beta),
-           "  drive I from " + (-Imax).toFixed(1) + " up to " + Imax.toFixed(1) + " and back",
-           "  hysteresis loop area = " + area.toFixed(2)];
-  L.push(area>0.3 ? "  the paths differ: history-dependent, the malfunction signature."
-                  : "  the paths lie on top of each other: it slides, no memory.");
-  L.push("  up:   " + sparkline(downsample(gUp, 60), 0, 1));
-  L.push("  down: " + sparkline(downsample(gDown, 60), 0, 1));
-  var svg = svgLines("sweep, beta = "+g3(p.beta)+", area = "+area.toFixed(2), "drive I", "g",
-    [{label:"up", xs:ups, ys:gUp}, {label:"down", xs:downs, ys:gDown}]);
-  return {svgs:[svg], text:L.join("\n")};
+  var folded = loopArea(ups.concat(downs), gUp.concat(gDown)) > 0.3;
+  var svg = svgLines("Push the drive up, then back down",
+    "drive (stress / strong input):  low  <-------->  high",
+    "its state: collapsed -> flooded",
+    [{label:"pushing up", xs:ups, ys:gUp}, {label:"easing back", xs:downs, ys:gDown}]);
+  var body = folded
+    ? "We slowly raise the drive (a stressor, a strong input) and then ease it "
+      + "back down. The two paths do not match: once it flips up into the "
+      + "flooded state it stays there even as you ease off, and you have to "
+      + "push well back the other way before it drops. That stickiness -- a "
+      + "memory of where it has been -- is the fingerprint of a malfunction, "
+      + "and it is why removing a trigger does not simply undo an episode."
+    : "We slowly raise the drive (a stressor, a strong input) and then ease it "
+      + "back down. The two paths lie right on top of each other: wherever the "
+      + "drive is, the allocator goes to the same place, no matter which way it "
+      + "came. It just slides -- no tipping point, no memory. That smooth, "
+      + "history-free response is what a miscalibration looks like.";
+  return {svgs:[svg], title:"Does it remember where it has been?", body:body};
 }
 
 function viewRecover(p){
   var betas=[1.0,2.0,3.0,3.5,3.8,3.9,3.95], nudge=0.1, tol=0.05*nudge, Tmax=600.0;
-  var L = ["critical slowing down: recovery time, variance, lag-1 autocorrelation",
-           "  beta      return time     variance     AR(1)"];
   var rts=[], ars=[];
   betas.forEach(function(beta){
     var q = Object.assign(defaults(), {beta:beta, tau_g:p.tau_g, dt:p.dt, noise:0});
@@ -363,19 +358,22 @@ function viewRecover(p){
     var rn = simulate(qn, 400.0, 1, null, 0.5, 0.5, gaussFactory(1));
     var x = [];
     for(var s=1000;s<rn.g.length;s++) x.push(rn.g[s][0]-0.5);
-    var v = pstdev(x); v=v*v;
-    var ar1 = pearson(x.slice(0,-1), x.slice(1));
-    ars.push(ar1);
-    L.push("  " + pad(g3(beta),8) + "  " + lpad(rt.toFixed(1),10) + "   " + lpad(v.toExponential(2),10) + "   " + lpad(ar1.toFixed(3),6));
+    ars.push(pearson(x.slice(0,-1), x.slice(1)));
   });
-  L.push("  return time, variance, and AR(1) all climb as beta -> 4: the fold.");
-  L.push("  (a fold signature: bipolar, and the onset of psychosis. The established,");
-  L.push("   fragmented schizophrenic state is chaos, not a fold, and does not slow.)");
-  var svg1 = svgLines("critical slowing: return time", "beta", "return time",
-    [{label:"return time", xs:betas, ys:rts}], {markers:true});
-  var svg2 = svgLines("critical slowing: lag-1 autocorrelation", "beta", "AR(1)",
-    [{label:"AR(1)", xs:betas, ys:ars}], {markers:true});
-  return {svgs:[svg1, svg2], text:L.join("\n")};
+  var svg1 = svgLines("How long it takes to recover from a nudge",
+    "stability:  steady  ----------->  near the tipping point", "recovery time",
+    [{label:"recovery time", xs:betas, ys:rts}], {markers:true});
+  var svg2 = svgLines("How much it lingers and wobbles",
+    "stability:  steady  ----------->  near the tipping point", "persistence",
+    [{label:"persistence", xs:betas, ys:ars}], {markers:true});
+  var body = "We give the allocator a small nudge and time how long it takes to "
+    + "settle back, moving it closer and closer to its tipping point (left to "
+    + "right). The nearer it gets, the slower it recovers and the more it "
+    + "lingers and wobbles -- long before it ever actually flips. That creeping "
+    + "sluggishness is an early-warning sign you can measure without waiting for "
+    + "a switch. It is the kind of signal that builds before a malfunction -- a "
+    + "mood episode, the run-up to psychosis -- and not before a fixed quirk.";
+  return {svgs:[svg1, svg2], title:"Early warning before it tips", body:body};
 }
 
 function viewSeries(p){
@@ -383,19 +381,25 @@ function viewSeries(p){
   var T=1000.0;
   var r = simulate(p, T, 1, null, 0.5, 0.5, gaussFactory(p.seed));
   var meanG = col(r.g, 0);
-  var L = ["time series, beta = "+g3(p.beta)+", ka = "+g3(p.ka)+", c = "+g3(p.c),
-           "  g:  " + sparkline(downsample(meanG, 70), -0.1, 1.1)];
-  if(p.adapt && p.ka>0) L.push("  a:  " + sparkline(downsample(r.a, 70), -0.1, 1.1));
-  var crossings=0;
-  for(var i=0;i<meanG.length-1;i++){ if((meanG[i]>0.5) !== (meanG[i+1]>0.5)) crossings++; }
-  L.push("  range " + Math.min.apply(null,meanG).toFixed(2) + " to " + Math.max.apply(null,meanG).toFixed(2) + ", crossings of the middle: " + crossings);
-  if(p.ka>=4 && p.beta>4 && p.adapt) L.push("  a slow, coherent oscillation: the operating point cycles and returns.");
-  else if(p.beta>4) L.push("  it falls into an arm and stays: no stable middle to rest at.");
-  else L.push("  monostable: small wandering around the single resting state.");
   var t = downsample(r.t, 2000), gp = downsample(meanG, 2000);
-  var series = [{label:"g", xs:t, ys:gp}];
-  if(p.ka>0) series.push({label:"a (slow)", xs:t, ys:downsample(r.a, 2000)});
-  return {svgs:[svgLines("series", "time", "g", series)], text:L.join("\n")};
+  var series = [{label:"gain", xs:t, ys:gp}];
+  if(p.ka>0) series.push({label:"the bar (slow)", xs:t, ys:downsample(r.a, 2000)});
+  var svg = svgLines("The allocator over time", "time",
+    "gain:  collapsed -> flooded", series);
+  var body;
+  if(p.ka>=4 && p.beta>4 && p.adapt)
+    body = "Watch it swing on a slow rhythm: the gain builds until everything "
+      + "floods (think mania), tips over and drains until nothing lands (think "
+      + "depression), then climbs back, over and over. It keeps returning to "
+      + "the swing rather than resting -- the model's picture of bipolar.";
+  else if(p.beta>4)
+    body = "It drops into one extreme and stays there -- flooded or collapsed, "
+      + "with no rhythm and no return on its own. (Give it the slow bar, by "
+      + "raising ka, to turn the snap into a swing.)";
+  else
+    body = "It just hovers near the middle, wobbling a little with the noise. "
+      + "Nothing builds and nothing tips -- a calm, stable allocator.";
+  return {svgs:[svg], title:"The allocator over time", body:body};
 }
 
 function viewIntegration(p){
@@ -404,31 +408,36 @@ function viewIntegration(p){
   var r = simulate(p, T, n, null, 0.5, 0.5, gaussFactory(p.seed));
   var half = Math.floor(r.g.length/2), spreads=[];
   for(var s=half;s<r.g.length;s++) spreads.push(pstdev(r.g[s]));
-  var spread = mean(spreads);
-  var gd = downsample(r.g, 60);
-  var mat = [];
-  for(var ch=0;ch<n;ch++){ mat.push(gd.map(function(row){ return row[ch]; })); }
-  var L = ["integration across " + n + " channels, c = " + g3(p.c),
-           heatmapAscii(mat),
-           "  cross-channel spread = " + spread.toFixed(3)];
-  if(spread<0.1) L.push("  one coherent field: the channels move together.");
-  else { L.push("  fragmented: the channels fall into different basins.");
-         L.push("  the established schizophrenic state: chaos, not a fold."); }
-  var wide = downsample(r.g, 240), mat2 = [];
-  for(var ch=0;ch<n;ch++){ mat2.push(wide.map(function(row){ return row[ch]; })); }
-  return {svgs:[svgHeatmap("integration, spread = "+spread.toFixed(3), mat2)], text:L.join("\n")};
+  var coherent = mean(spreads) < 0.1;
+  var wide = downsample(r.g, 240), mat = [];
+  for(var ch=0;ch<n;ch++){ mat.push(wide.map(function(row){ return row[ch]; })); }
+  var svg = svgHeatmap("Twelve channels over time (bright = flooded, dark = collapsed)", mat);
+  var body = coherent
+    ? "Twelve channels -- think of them as different streams of perception and "
+      + "thought. Here they all move together as one field: a single mood laid "
+      + "over everything, swinging and returning as a whole. Unstable, but still "
+      + "one integrated mind. That is the bipolar-type picture."
+    : "Twelve channels -- different streams of perception and thought. Here they "
+      + "scatter into different states and stay scattered: no shared field, no "
+      + "single mood, no coming back together. The binding that ties a mind into "
+      + "one thing has come apart -- the schizophrenia-type picture.";
+  return {svgs:[svg], title:"One mind, or many?", body:body};
 }
 
 function viewProfileAdhd(p){
   var delay = linspace(0,10,41);
   var weight = delay.map(function(d){ return settle(p, 4.0*(1.0/(1.0+p.k*d) - 0.5), 0.5); });
-  var L = ["adhd profile: weight vs reward delay, k = " + g3(p.k),
-           "  delay:       now " + rep("-",52) + " later",
-           "  weight:      " + sparkline(downsample(weight, 50), 0, 1),
-           "  crossover at delay ~ " + (1.0/p.k).toFixed(2) + "; weight piled on the immediate (" + weight[0].toFixed(2) + ")",
-           "  and starved from the delayed (" + weight[weight.length-1].toFixed(2) + ").",
-           "  both arms at once, held steady: a miscalibration, not a swing."];
-  return {svgs:[svgLines("adhd profile", "reward delay", "weight", [{label:"weight", xs:delay, ys:weight}])], text:L.join("\n")};
+  var svg = svgLines("Attention vs. how soon a reward arrives",
+    "how soon it pays off:  now  -------->  later", "attention it gets",
+    [{label:"attention", xs:delay, ys:weight}]);
+  var body = "This is how much attention each option gets, by how soon it pays "
+    + "off. With steep discounting, whatever pays now is piled with weight while "
+    + "anything that pays later is starved -- both at once, and steadily. That is "
+    + "the two sides of one setting: caught by the immediate (distractible, "
+    + "impulsive, or locked onto something engaging) and unable to get going on "
+    + "the important-but-distant. It never swings; it just holds this shape. "
+    + "Steepen the discount and the curve drops away sooner.";
+  return {svgs:[svg], title:"Attention vs. how soon a reward arrives", body:body};
 }
 
 function viewProfileAutism(p){
@@ -437,21 +446,23 @@ function viewProfileAutism(p){
   var gOpt = driveOpt.map(function(d){ return settle(p, d, 0.5); });
   var realized = driveOpt.map(function(d){ return settle(p, p.lam*d, 0.5); });
   var mismatch = vol.map(function(v,i){ return realized[i]-gOpt[i]; });
-  var lo=Math.min.apply(null,mismatch), hi=Math.max.apply(null,mismatch);
-  var L = ["autism profile: gain mismatch vs volatility, lam = " + g3(p.lam),
-           "  volatility:  stable " + rep("-",50) + " volatile",
-           "  mismatch:    " + sparkline(downsample(mismatch, 50)),
-           "  mismatch spans " + lo.toFixed(2) + " to " + hi.toFixed(2) + " (negative = gain too low,",
-           "  collapse; positive = gain too high, flooding)"];
-  L.push((hi-lo>0.1) ? "  a stuck gain: too low in stable contexts, too high in volatile ones."
-                     : "  a flexible gain tracks the context: almost no mismatch.");
-  L.push("  a fixed profile either way: it slides with the environment, never switches.");
-  return {svgs:[svgLines("autism profile", "volatility", "gain mismatch", [{label:"gain mismatch", xs:vol, ys:mismatch}])], text:L.join("\n")};
+  var stuck = (Math.max.apply(null,mismatch) - Math.min.apply(null,mismatch)) > 0.1;
+  var svg = svgLines("Does the gain fit the moment?",
+    "the world:  steady  -------->  fast-changing", "gain:  too low  <->  too high",
+    [{label:"mismatch", xs:vol, ys:mismatch}]);
+  var body = stuck
+    ? "This is whether the gain matches what each situation needs. A stuck "
+      + "setting cannot adjust: it runs too high when the world is changing fast "
+      + "(overwhelm -- too much gets through) and too low when the world is "
+      + "steady (missing things others would catch) -- both at once. It does not "
+      + "swing between them; it holds the mismatch as a fixed profile, sliding "
+      + "smoothly as the world changes but never flipping."
+    : "This is whether the gain matches what each situation needs. With a "
+      + "flexible setting it tracks the world almost perfectly -- tightening when "
+      + "things are steady, loosening when they change -- so the mismatch stays "
+      + "near zero everywhere. Lower the flexibility to see the stuck profile.";
+  return {svgs:[svg], title:"Does the gain fit the moment?", body:body};
 }
-
-function pad(s, w){ s=String(s); while(s.length<w) s+=" "; return s; }
-function lpad(s, w){ s=String(s); while(s.length<w) s=" "+s; return s; }
-function rep(ch, n){ var s=""; for(var i=0;i<n;i++) s+=ch; return s; }
 
 var RUNNERS = {
   fp: viewFp, sweep: viewSweep, recover: viewRecover, series: viewSeries,
@@ -576,7 +587,11 @@ function render(){
   try { out = runView(view, state); }
   catch(e){ el("text").textContent = "error: " + e; return; }
   el("plots").innerHTML = out.svgs.join("");
-  el("text").textContent = out.text;
+  var box = el("text");
+  box.innerHTML = "";
+  var h = document.createElement("div"); h.className = "t"; h.textContent = out.title || "";
+  var b = document.createElement("div"); b.className = "b"; b.textContent = out.body || "";
+  box.appendChild(h); box.appendChild(b);
 }
 
 el("preset").onchange = function(){ if(this.value!=="custom") applyPreset(this.value); render(); };

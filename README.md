@@ -97,8 +97,11 @@ the browser (a faithful JavaScript port of the update rule in `allocator_toy.py`
 with a slider for every knob, a preset menu, and a view switch (fixed points, sweep,
 recover, series, integration, the two profiles). Drag a slider and the graph updates
 live, in real time: the model recomputes once per animation frame as the knob moves,
-redrawing the plot and the narration. No build step and no dependencies; each view
-computes with only the knobs it uses, so the rest stay dimmed.
+redrawing the plot and a plain-language reading of what it means. The app is built
+for a feel of the model, so its captions talk in the model's own terms (flooding and
+collapse, snap versus slide, swinging, fragmenting) rather than the numbers; the CLI
+keeps the technical readout. No build step and no dependencies; each view computes
+with only the knobs it uses, so the rest stay dimmed.
 
 Three ways to open it:
 
