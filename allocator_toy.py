@@ -50,11 +50,9 @@ House rules if Claude Code edits this:
 
 import argparse
 import http.server
-import json
 import math
 import os
 import random
-import urllib.parse
 import webbrowser
 
 # ASCII intensity ramp, low to high. Used for every sparkline and heatmap so
@@ -281,20 +279,11 @@ def _svg_open(w, h):
             '<rect width="%d" height="%d" fill="white"/>' % (w, h, w, h, w, h))
 
 
-# When the browser UI is driving, plots are collected here as strings instead
-# of being written to out/. None means the normal file-writing behavior.
-_SVG_SINK = None
-
-
 def _write_svg(name, parts):
-    svg = "\n".join(parts) + "\n</svg>\n"
-    if _SVG_SINK is not None:
-        _SVG_SINK.append(svg)
-        return
     os.makedirs("out", exist_ok=True)
     path = "out/" + name + ".svg"
     with open(path, "w") as f:
-        f.write(svg)
+        f.write("\n".join(parts) + "\n</svg>\n")
     print("saved " + path)
 
 
@@ -929,98 +918,46 @@ def cmd_guide(args):
 
 
 # ----------------------------------------------------------------------------
-# Browser UI (an optional front-end over the same one update rule)
+# Browser UI
 # ----------------------------------------------------------------------------
 #
-# The `app` command serves a small single-page UI from the standard-library
-# http.server: sliders for the knobs, the same SVG plots, and the same ASCII
-# narration. No third-party packages, nothing to install; it opens in a browser.
+# The UI is docs/index.html: a single self-contained page that runs the model
+# in the browser (a faithful JS port of the update rule above), with a slider
+# for every knob. The same file is what GitHub Pages serves, so the hosted site
+# and the local `app` command are the identical page. The `app` command below
+# just serves that file from the standard-library http.server -- nothing to
+# install, and no server-side computation.
 
-# Map a UI view name to (command function, forced preset for the profile axis).
-_VIEWS = {
-    "fp": (cmd_fp, None),
-    "sweep": (cmd_sweep, None),
-    "recover": (cmd_recover, None),
-    "series": (cmd_series, None),
-    "integration": (cmd_integration, None),
-    "profile_adhd": (cmd_profile, "adhd"),
-    "profile_autism": (cmd_profile, "autism"),
-}
-
-
-def _run_view(view, params):
-    """Run one view with the given knob values. Returns (text, [svg, ...]) by
-    capturing what the command prints and the plots it would have saved."""
-    import io
-    import contextlib
-
-    fn, preset = _VIEWS.get(view, _VIEWS["fp"])
-    args = argparse.Namespace(
-        preset=preset, plot=True, seed=None, dt=None,
-        beta=params.get("beta"), I=params.get("I"), ka=params.get("ka"),
-        c=params.get("c"), k=params.get("k"), lam=params.get("lam"),
-        noise=params.get("noise"), adapt=params.get("adapt"))
-
-    global _SVG_SINK
-    _SVG_SINK = []
-    buf = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(buf):
-            fn(args)
-        svgs = list(_SVG_SINK)
-    finally:
-        _SVG_SINK = None
-    return buf.getvalue(), svgs
-
-
-def _run_request(query):
-    """Translate a parsed /run query into a model run and a JSON payload."""
-    def num(key):
-        v = query.get(key, [None])[0]
-        return float(v) if v not in (None, "") else None
-
-    view = query.get("view", ["fp"])[0]
-    adapt_raw = query.get("adapt", [None])[0]
-    adapt = int(adapt_raw) if adapt_raw not in (None, "") else None
-    params = dict(beta=num("beta"), I=num("I"), ka=num("ka"), c=num("c"),
-                  k=num("k"), lam=num("lam"), noise=num("noise"), adapt=adapt)
-    text, svgs = _run_view(view, params)
-    return {"text": text, "svgs": svgs}
-
-
-class _UIHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, *a):
-        pass  # keep the terminal quiet
-
-    def _send(self, code, body, content_type):
-        data = body.encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path in ("/", "/index.html"):
-            self._send(200, APP_HTML, "text/html; charset=utf-8")
-            return
-        if parsed.path == "/run":
-            query = urllib.parse.parse_qs(parsed.query)
-            try:
-                payload = _run_request(query)
-            except Exception as exc:  # a bad knob should not kill the server
-                payload = {"text": "error: " + str(exc), "svgs": []}
-            self._send(200, json.dumps(payload), "application/json")
-            return
-        self._send(404, "not found", "text/plain")
+def _page_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "index.html")
 
 
 def cmd_app(args):
-    """Launch a browser UI with a slider for every knob.
+    """Serve the browser UI (docs/index.html) on localhost.
 
-    Serves a single self-contained page from the standard library (no installs).
-    Move a slider and the model reruns; the plot and the narration update."""
+    The page runs the whole model client-side, so this is just a static file
+    server for local use; the same page is what GitHub Pages hosts. Nothing to
+    install. Open the printed URL, or pass --no-browser and visit it yourself."""
+    path = _page_path()
+    if not os.path.exists(path):
+        print("could not find " + path)
+        print("the UI lives at docs/index.html next to this script; open that")
+        print("file directly in a browser, or keep it beside allocator_toy.py.")
+        return
+    with open(path, "rb") as f:
+        page = f.read()
+
+    class _UIHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass  # keep the terminal quiet
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+
     host = "127.0.0.1"
     start = args.port or 8000
     httpd = None
@@ -1035,6 +972,7 @@ def cmd_app(args):
         return
     url = "http://%s:%d/" % (host, port)
     print("Allocator UI serving at " + url)
+    print("(the same page also works opened straight from docs/index.html)")
     print("Open it in a browser; press Ctrl-C to stop.")
     if not args.no_browser:
         try:
@@ -1045,225 +983,6 @@ def cmd_app(args):
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped.")
-
-
-# The whole UI is this one ASCII string: HTML, CSS, and vanilla JS. It talks to
-# /run and draws the SVG the model returns. Kept dependency-free on purpose.
-APP_HTML = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Allocator Toy Model</title>
-<style>
-:root{--bg:#f6f7f9;--panel:#fff;--ink:#1b1b1f;--muted:#6b6b76;--line:#e4e4ea;--accent:#2563eb;}
-*{box-sizing:border-box;}
-body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
-header{padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel);}
-header h1{margin:0;font-size:18px;}
-header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
-main{display:flex;gap:20px;padding:20px;align-items:flex-start;flex-wrap:wrap;}
-#controls{flex:0 0 330px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;}
-#out{flex:1 1 460px;min-width:360px;}
-.group{margin-bottom:18px;}
-.group > label{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
-.hint{color:var(--muted);font-size:12px;margin:8px 0 0;}
-.seg{display:flex;flex-wrap:wrap;gap:6px;}
-.seg button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink);}
-.seg button:hover{border-color:var(--accent);}
-.seg button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;}
-.slider{margin-bottom:12px;transition:opacity .15s;}
-.slider.dim{opacity:.38;}
-.slider .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
-.slider .name{font-size:12px;}
-.slider .val{font-size:12px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums;}
-input[type=range]{width:100%;accent-color:var(--accent);}
-.check{display:flex;align-items:center;gap:8px;font-size:13px;}
-#plots{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;min-height:120px;}
-#plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
-pre#text{background:#0f1117;color:#d7dae0;border-radius:12px;padding:14px;font-size:12px;line-height:1.4;overflow:auto;white-space:pre;margin:0;}
-footer{padding:6px 24px 26px;color:var(--muted);font-size:12px;}
-footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
-.loading{opacity:.5;}
-</style>
-</head>
-<body>
-<header>
-  <h1>Allocator Toy Model</h1>
-  <p>One update rule, two kinds of fault. Move a knob and watch.</p>
-</header>
-<main>
-  <section id="controls">
-    <div class="group">
-      <label>View</label>
-      <div id="views" class="seg"></div>
-      <p id="viewhint" class="hint"></p>
-    </div>
-    <div class="group">
-      <label for="preset">Preset</label>
-      <select id="preset">
-        <option value="custom">custom</option>
-        <option value="baseline">baseline</option>
-        <option value="schizophrenia">schizophrenia (malfunction, fragments)</option>
-        <option value="bipolar">bipolar (malfunction, oscillates)</option>
-        <option value="adhd">adhd (miscalibration, steep discount)</option>
-        <option value="autism">autism (miscalibration, stuck gain)</option>
-      </select>
-    </div>
-    <div class="group">
-      <label>Knobs</label>
-      <div id="sliders"></div>
-      <label class="check"><input type="checkbox" id="adapt" checked> engage slow adaptation (a)</label>
-    </div>
-  </section>
-  <section id="out">
-    <div id="plots"></div>
-    <pre id="text">loading...</pre>
-  </section>
-</main>
-<footer>
-  <code>dg/dt = ( -g + S( beta*(g-0.5) + I - ka*(a-0.5) + c*(mean(g)-g) + noise ) ) / tau_g</code><br>
-  S is the logistic squash. beta=4 is the fold. Malfunction = raise beta past 4 (it moves);
-  miscalibration = set k or lam oddly with beta low (it holds a fixed offset).
-</footer>
-<script>
-var KNOBS = [
-  {key:"beta", name:"beta - stability (fold at 4)", min:0, max:10, step:0.05},
-  {key:"I", name:"I - external drive", min:-4, max:4, step:0.05},
-  {key:"ka", name:"ka - slow adaptation strength", min:0, max:8, step:0.1},
-  {key:"c", name:"c - integration coupling", min:0, max:4, step:0.05},
-  {key:"k", name:"k - discount steepness (ADHD)", min:0.05, max:1.5, step:0.01},
-  {key:"lam", name:"lam - flexibility (autism)", min:0, max:1, step:0.01},
-  {key:"noise", name:"noise", min:0, max:0.2, step:0.005}
-];
-var DEFAULTS = {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, noise:0, adapt:1};
-var PRESETS = {
-  baseline:{beta:2}, schizophrenia:{beta:8, c:0.2, ka:0},
-  bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, k:0.95}, autism:{beta:2, lam:0.1}
-};
-var VIEWS = [
-  {key:"series", label:"series", uses:["beta","ka","c","noise"], hint:"Time series of the field. Try the bipolar preset for the oscillation."},
-  {key:"fp", label:"fixed points", uses:["beta"], hint:"Resting states. Two arms appear once beta passes 4."},
-  {key:"sweep", label:"sweep", uses:["beta"], hint:"Reversible drive sweep. A folded loop takes a different path up than down."},
-  {key:"recover", label:"recover", uses:[], hint:"Sweeps beta itself: recovery time blows up nearing the fold."},
-  {key:"integration", label:"integration", uses:["beta","c","noise"], hint:"12 channels. High c stays one field; low c fragments."},
-  {key:"profile_adhd", label:"ADHD profile", uses:["k"], hint:"Weight vs reward delay: a fixed two-armed curve."},
-  {key:"profile_autism", label:"autism profile", uses:["lam"], hint:"Gain mismatch vs volatility: a fixed two-armed curve."}
-];
-
-var state = Object.assign({}, DEFAULTS);
-var view = "series";
-var timer = null;
-
-function el(id){ return document.getElementById(id); }
-
-function buildViews(){
-  var box = el("views");
-  VIEWS.forEach(function(v){
-    var b = document.createElement("button");
-    b.textContent = v.label;
-    b.onclick = function(){ view = v.key; markViews(); applyDim(); run(); };
-    b.dataset.key = v.key;
-    box.appendChild(b);
-  });
-}
-function markViews(){
-  var defn = currentView();
-  el("viewhint").textContent = defn.hint;
-  Array.prototype.forEach.call(el("views").children, function(b){
-    b.classList.toggle("active", b.dataset.key === view);
-  });
-}
-function currentView(){
-  for(var i=0;i<VIEWS.length;i++){ if(VIEWS[i].key===view) return VIEWS[i]; }
-  return VIEWS[0];
-}
-
-function buildSliders(){
-  var box = el("sliders");
-  KNOBS.forEach(function(kn){
-    var wrap = document.createElement("div");
-    wrap.className = "slider";
-    wrap.dataset.key = kn.key;
-    var row = document.createElement("div"); row.className = "row";
-    var nm = document.createElement("span"); nm.className = "name"; nm.textContent = kn.name;
-    var val = document.createElement("span"); val.className = "val"; val.id = "v_"+kn.key;
-    row.appendChild(nm); row.appendChild(val);
-    var inp = document.createElement("input");
-    inp.type = "range"; inp.min = kn.min; inp.max = kn.max; inp.step = kn.step; inp.id = "s_"+kn.key;
-    inp.oninput = function(){
-      state[kn.key] = parseFloat(inp.value);
-      val.textContent = (+state[kn.key]).toFixed(2);
-      el("preset").value = "custom";
-      schedule();
-    };
-    wrap.appendChild(row); wrap.appendChild(inp);
-    box.appendChild(wrap);
-  });
-}
-
-function syncSliders(){
-  KNOBS.forEach(function(kn){
-    el("s_"+kn.key).value = state[kn.key];
-    el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2);
-  });
-  el("adapt").checked = !!state.adapt;
-}
-
-function applyDim(){
-  var uses = currentView().uses;
-  Array.prototype.forEach.call(el("sliders").children, function(w){
-    var on = uses.length === 0 ? false : uses.indexOf(w.dataset.key) >= 0;
-    w.classList.toggle("dim", !on);
-  });
-}
-
-function applyPreset(name){
-  state = Object.assign({}, DEFAULTS);
-  if(PRESETS[name]) Object.assign(state, PRESETS[name]);
-  state.adapt = el("adapt").checked ? 1 : 0;
-  syncSliders();
-}
-
-function schedule(){
-  if(timer) clearTimeout(timer);
-  timer = setTimeout(run, 110);
-}
-
-function run(){
-  var q = new URLSearchParams();
-  q.set("view", view);
-  KNOBS.forEach(function(kn){ q.set(kn.key, state[kn.key]); });
-  q.set("adapt", el("adapt").checked ? 1 : 0);
-  el("text").classList.add("loading");
-  fetch("/run?" + q.toString()).then(function(r){ return r.json(); }).then(function(d){
-    el("plots").innerHTML = (d.svgs && d.svgs.length) ? d.svgs.join("") : "";
-    el("text").textContent = d.text || "";
-    el("text").classList.remove("loading");
-  }).catch(function(e){
-    el("text").textContent = "request failed: " + e;
-    el("text").classList.remove("loading");
-  });
-}
-
-el("preset").onchange = function(){
-  if(this.value !== "custom") applyPreset(this.value);
-  run();
-};
-el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; schedule(); };
-
-buildViews();
-buildSliders();
-applyPreset("bipolar");
-el("preset").value = "bipolar";
-markViews();
-applyDim();
-run();
-</script>
-</body>
-</html>
-"""
 
 
 # ----------------------------------------------------------------------------

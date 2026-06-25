@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allocator Toy Model</title>
+<!--
+  This page runs the allocator toy model entirely in the browser: no server, no
+  build step, no dependencies. It is a faithful JavaScript port of the update
+  rule in allocator_toy.py; if you change the model there, change it here too.
+  It works opened straight from disk (file://) and hosted on GitHub Pages alike.
+-->
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--ink:#1b1b1f;--muted:#6b6b76;--line:#e4e4ea;--accent:#2563eb;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
+header{padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel);}
+header h1{margin:0;font-size:18px;}
+header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
+main{display:flex;gap:20px;padding:20px;align-items:flex-start;flex-wrap:wrap;}
+#controls{flex:0 0 330px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;}
+#out{flex:1 1 460px;min-width:360px;}
+.group{margin-bottom:18px;}
+.group > label{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.hint{color:var(--muted);font-size:12px;margin:8px 0 0;}
+.seg{display:flex;flex-wrap:wrap;gap:6px;}
+.seg button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink);}
+.seg button:hover{border-color:var(--accent);}
+.seg button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;}
+.slider{margin-bottom:12px;transition:opacity .15s;}
+.slider.dim{opacity:.38;}
+.slider .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
+.slider .name{font-size:12px;}
+.slider .val{font-size:12px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums;}
+input[type=range]{width:100%;accent-color:var(--accent);}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;}
+#plots{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;min-height:120px;}
+#plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
+pre#text{background:#0f1117;color:#d7dae0;border-radius:12px;padding:14px;font-size:12px;line-height:1.4;overflow:auto;white-space:pre;margin:0;}
+footer{padding:6px 24px 26px;color:var(--muted);font-size:12px;}
+footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Allocator Toy Model</h1>
+  <p>One update rule, two kinds of fault. Move a knob and watch. Runs entirely in your browser.</p>
+</header>
+<main>
+  <section id="controls">
+    <div class="group">
+      <label>View</label>
+      <div id="views" class="seg"></div>
+      <p id="viewhint" class="hint"></p>
+    </div>
+    <div class="group">
+      <label for="preset">Preset</label>
+      <select id="preset">
+        <option value="custom">custom</option>
+        <option value="baseline">baseline</option>
+        <option value="schizophrenia">schizophrenia (malfunction, fragments)</option>
+        <option value="bipolar">bipolar (malfunction, oscillates)</option>
+        <option value="adhd">adhd (miscalibration, steep discount)</option>
+        <option value="autism">autism (miscalibration, stuck gain)</option>
+      </select>
+    </div>
+    <div class="group">
+      <label>Knobs</label>
+      <div id="sliders"></div>
+      <label class="check"><input type="checkbox" id="adapt" checked> engage slow adaptation (the bar, a)</label>
+    </div>
+  </section>
+  <section id="out">
+    <div id="plots"></div>
+    <pre id="text">loading...</pre>
+  </section>
+</main>
+<footer>
+  <code>dg/dt = ( -g + S( beta*(g-0.5) + I - ka*(a-0.5) + c*(mean(g)-g) + noise ) ) / tau_g</code><br>
+  S is the logistic squash. beta=4 is the fold. Malfunction = raise beta past 4 (it moves);
+  miscalibration = set k or lam oddly with beta low (it holds a fixed offset).
+</footer>
+<script>
+"use strict";
+
+// ---- model (a faithful port of allocator_toy.py) --------------------------
+
+var RAMP = " .:-=+*#%@";
+
+function S(x){ if(x >= 0){ return 1/(1+Math.exp(-x)); } var z = Math.exp(x); return z/(1+z); }
+function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s/a.length; }
+function pstdev(a){ var m=mean(a),s=0; for(var i=0;i<a.length;i++){ var d=a[i]-m; s+=d*d; } return Math.sqrt(s/a.length); }
+function pearson(a,b){
+  var n=a.length; if(n<2) return NaN;
+  var ma=mean(a), mb=mean(b), num=0, da=0, db=0;
+  for(var i=0;i<n;i++){ num+=(a[i]-ma)*(b[i]-mb); da+=(a[i]-ma)*(a[i]-ma); db+=(b[i]-mb)*(b[i]-mb); }
+  da=Math.sqrt(da); db=Math.sqrt(db);
+  return (da>0 && db>0) ? num/(da*db) : NaN;
+}
+function linspace(a,b,n){ if(n===1) return [a]; var o=[]; for(var i=0;i<n;i++) o.push(a+(b-a)*i/(n-1)); return o; }
+
+// seeded RNG (mulberry32) and gaussian (Box-Muller), so runs are reproducible
+function mulberry32(seed){
+  var t = seed >>> 0;
+  return function(){
+    t += 0x6D2B79F5;
+    var r = Math.imul(t ^ (t >>> 15), t | 1);
+    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gaussFactory(seed){
+  var rand = mulberry32(seed), spare = null;
+  return function(){
+    if(spare !== null){ var s = spare; spare = null; return s; }
+    var u, v, s2;
+    do { u = 2*rand()-1; v = 2*rand()-1; s2 = u*u + v*v; } while(s2 >= 1 || s2 === 0);
+    var f = Math.sqrt(-2*Math.log(s2)/s2);
+    spare = v*f; return u*f;
+  };
+}
+
+function defaults(){ return {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, adapt:1, noise:0, tau_g:1, tau_a:40, dt:0.05, seed:0}; }
+
+function simulate(p, T, n, driveFn, g0, a0, gauss){
+  var steps = Math.round(T/p.dt);
+  var g;
+  if(g0 == null){ g = []; for(var i=0;i<n;i++) g.push(0.5); }
+  else if(Array.isArray(g0)){ g = g0.slice(); }
+  else { g = []; for(var i=0;i<n;i++) g.push(g0); }
+  var a = a0;
+  var outG = [], outA = [], t = [];
+  for(var s=0;s<steps;s++){
+    var now = s*p.dt;
+    var drv = driveFn ? driveFn(now) : p.I;
+    var mg = mean(g);
+    var ng = [];
+    for(var i=0;i<n;i++){
+      var x = p.beta*(g[i]-0.5) + drv - p.ka*(a-0.5) + p.c*(mg-g[i]);
+      if(p.noise > 0) x += p.noise * gauss();
+      ng.push(g[i] + p.dt*(-g[i] + S(x))/p.tau_g);
+    }
+    g = ng;
+    if(p.adapt) a = a + p.dt*(mg - a)/p.tau_a;
+    outG.push(g); outA.push(a); t.push(now);
+  }
+  return {t:t, g:outG, a:outA};
+}
+
+function settle(p, driveValue, g0, T){
+  T = (T == null) ? 80.0 : T;
+  var q = Object.assign(defaults(), {beta:p.beta, I:driveValue, ka:p.ka, c:p.c, adapt:p.adapt, noise:0, tau_g:p.tau_g, tau_a:p.tau_a, dt:p.dt});
+  var r = simulate(q, T, 1, null, g0, 0.5, null);
+  return r.g[r.g.length-1][0];
+}
+
+function fixedPoints(beta){
+  var grid = linspace(1e-4, 1-1e-4, 4000), drive = 0.0;
+  function h(g){ return S(beta*(g-0.5)+drive) - g; }
+  var hs = grid.map(h), roots = [];
+  for(var i=0;i<grid.length-1;i++){
+    if(hs[i] === 0 || hs[i]*hs[i+1] < 0){
+      var lo = grid[i], hi = grid[i+1];
+      for(var j=0;j<60;j++){
+        var mid = 0.5*(lo+hi);
+        if(h(lo)*h(mid) <= 0) hi = mid; else lo = mid;
+      }
+      var g = 0.5*(lo+hi);
+      var sx = S(beta*(g-0.5)+drive);
+      roots.push([g, (-1 + beta*sx*(1-sx)) < 0]);
+    }
+  }
+  var out = [];
+  roots.forEach(function(r){
+    var dup = out.some(function(o){ return Math.abs(r[0]-o[0]) < 1e-3; });
+    if(!dup) out.push(r);
+  });
+  return out;
+}
+
+function loopArea(xs, ys){
+  var n = xs.length, s = 0;
+  for(var i=0;i<n;i++){ var jn=(i+1)%n; s += xs[i]*ys[jn] - xs[jn]*ys[i]; }
+  return 0.5*Math.abs(s);
+}
+
+// ---- ASCII rendering ------------------------------------------------------
+
+function clamp01(f){ return f<0 ? 0 : (f>1 ? 1 : f); }
+function sparkline(values, lo, hi){
+  if(lo == null) lo = Math.min.apply(null, values);
+  if(hi == null) hi = Math.max.apply(null, values);
+  if(hi - lo < 1e-12) hi = lo + 1e-12;
+  var out = "";
+  for(var i=0;i<values.length;i++){
+    out += RAMP[Math.round(clamp01((values[i]-lo)/(hi-lo))*(RAMP.length-1))];
+  }
+  return out;
+}
+function heatmapAscii(matrix, lo, hi){
+  lo = (lo==null)?0:lo; hi = (hi==null)?1:hi;
+  return matrix.map(function(row){
+    var s = "";
+    for(var i=0;i<row.length;i++){ s += RAMP[Math.round(clamp01((row[i]-lo)/(hi-lo))*(RAMP.length-1))]; }
+    return "|" + s + "|";
+  }).join("\n");
+}
+function downsample(arr, width){
+  var n = arr.length;
+  if(n <= width) return arr.slice();
+  var out = [];
+  for(var i=0;i<width;i++) out.push(arr[Math.round(i*(n-1)/(width-1))]);
+  return out;
+}
+
+// ---- SVG rendering --------------------------------------------------------
+
+var PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"];
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function fmt(v){
+  if(v === 0) return "0";
+  if(Math.abs(v) >= 1000 || Math.abs(v) < 0.001) return v.toExponential(1);
+  return Number(v.toPrecision(3)).toString();
+}
+function g3(v){ return Number(v.toPrecision(3)).toString(); }
+function svgOpen(w,h){
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" '
+       + 'font-family="monospace" font-size="12"><rect width="'+w+'" height="'+h+'" fill="white"/>';
+}
+function svgLines(title, xlabel, ylabel, series, opts){
+  opts = opts || {};
+  var W=680, H=420, ml=64, mr=150, mt=44, mb=52;
+  var px0=ml, px1=W-mr, py0=H-mb, py1=mt;
+  var xsAll=[], ysAll=[];
+  series.forEach(function(s){ s.xs.forEach(function(x){xsAll.push(x);}); s.ys.forEach(function(y){ysAll.push(y);}); });
+  if(opts.points) opts.points.forEach(function(p){ xsAll.push(p[0]); ysAll.push(p[1]); });
+  var xmin=Math.min.apply(null,xsAll), xmax=Math.max.apply(null,xsAll);
+  var ymin=Math.min.apply(null,ysAll), ymax=Math.max.apply(null,ysAll);
+  if(xmax<=xmin) xmax=xmin+1;
+  if(ymax<=ymin) ymax=ymin+1;
+  ymin -= 0.06*(ymax-ymin); ymax += 0.06*(ymax-ymin);
+  function X(x){ return px0 + (x-xmin)/(xmax-xmin)*(px1-px0); }
+  function Y(y){ return py0 + (y-ymin)/(ymax-ymin)*(py1-py0); }
+  var o = [svgOpen(W,H)];
+  o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
+  o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px1+'" y2="'+py0+'" stroke="black"/>');
+  o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px0+'" y2="'+py1+'" stroke="black"/>');
+  for(var i=0;i<6;i++){
+    var xv = xmin+(xmax-xmin)*i/5, xp = X(xv);
+    o.push('<text x="'+xp+'" y="'+(py0+18)+'" text-anchor="middle" fill="#444">'+esc(fmt(xv))+'</text>');
+    var yv = ymin+(ymax-ymin)*i/5, yp = Y(yv);
+    o.push('<text x="'+(px0-8)+'" y="'+(yp+4)+'" text-anchor="end" fill="#444">'+esc(fmt(yv))+'</text>');
+  }
+  o.push('<text x="'+((px0+px1)/2)+'" y="'+(H-14)+'" text-anchor="middle">'+esc(xlabel)+'</text>');
+  o.push('<text x="16" y="'+((py0+py1)/2)+'" transform="rotate(-90 16 '+((py0+py1)/2)+')" text-anchor="middle">'+esc(ylabel)+'</text>');
+  series.forEach(function(s, i){
+    var col = PALETTE[i % PALETTE.length];
+    var pts = "";
+    for(var j=0;j<s.xs.length;j++){ pts += X(s.xs[j]).toFixed(2)+","+Y(s.ys[j]).toFixed(2)+" "; }
+    o.push('<polyline fill="none" stroke="'+col+'" stroke-width="1.6" points="'+pts+'"/>');
+    if(opts.markers){ for(var j=0;j<s.xs.length;j++){ o.push('<circle cx="'+X(s.xs[j]).toFixed(2)+'" cy="'+Y(s.ys[j]).toFixed(2)+'" r="2.5" fill="'+col+'"/>'); } }
+    var ly = mt + 10 + i*18;
+    o.push('<line x1="'+(px1+12)+'" y1="'+ly+'" x2="'+(px1+32)+'" y2="'+ly+'" stroke="'+col+'" stroke-width="2.5"/>');
+    o.push('<text x="'+(px1+38)+'" y="'+(ly+4)+'">'+esc(s.label)+'</text>');
+  });
+  if(opts.points){
+    opts.points.forEach(function(p){
+      var col = p[2] ? "#2ca02c" : "#d62728";
+      o.push('<circle cx="'+X(p[0]).toFixed(2)+'" cy="'+Y(p[1]).toFixed(2)+'" r="4" fill="'+col+'" stroke="black"/>');
+    });
+  }
+  o.push("</svg>");
+  return o.join("\n");
+}
+function heatRgb(f){
+  f = clamp01(f);
+  var stops = [[0,[0,0,4]],[0.25,[81,18,124]],[0.5,[183,55,121]],[0.75,[252,137,97]],[1,[252,253,191]]];
+  for(var i=0;i<stops.length-1;i++){
+    var f0=stops[i][0], c0=stops[i][1], f1=stops[i+1][0], c1=stops[i+1][1];
+    if(f <= f1){
+      var t = (f1>f0) ? (f-f0)/(f1-f0) : 0;
+      function hx(j){ return ("0"+Math.round(c0[j]+(c1[j]-c0[j])*t).toString(16)).slice(-2); }
+      return "#"+hx(0)+hx(1)+hx(2);
+    }
+  }
+  return "#fcfdbf";
+}
+function svgHeatmap(title, matrix){
+  var rows=matrix.length, cols=matrix[0].length;
+  var W=680, H=360, ml=64, mr=24, mt=44, mb=50;
+  var pw=W-ml-mr, ph=H-mt-mb, cw=pw/cols, chh=ph/rows;
+  var o = [svgOpen(W,H)];
+  o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
+  for(var r=0;r<rows;r++){
+    for(var c=0;c<cols;c++){
+      var x = ml + c*cw, y = mt + r*chh;
+      o.push('<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+(cw+0.6).toFixed(2)+'" height="'+(chh+0.6).toFixed(2)+'" fill="'+heatRgb(matrix[r][c])+'"/>');
+    }
+  }
+  o.push('<text x="'+(ml+pw/2)+'" y="'+(H-14)+'" text-anchor="middle">time</text>');
+  o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">channel</text>');
+  o.push("</svg>");
+  return o.join("\n");
+}
+
+// ---- views (each returns {svgs:[...], text:"..."}) ------------------------
+
+function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
+
+function viewFp(p){
+  var fps = fixedPoints(p.beta);
+  var L = ["fixed points of the single-channel loop, beta = " + g3(p.beta),
+           "  (beta=4 is the fold; below it one resting state, above it two)"];
+  fps.forEach(function(f){
+    var g=f[0], stable=f[1], arm="";
+    if(stable && g>0.6) arm="  <- flooding arm";
+    else if(stable && g<0.4) arm="  <- collapse arm";
+    L.push("  g* = " + g.toFixed(4) + "   " + (stable?"stable  ":"unstable") + arm);
+  });
+  var nStable = fps.filter(function(f){ return f[1]; }).length;
+  L.push(nStable>=2 ? "two arms: the loop has folded."
+                    : "one resting state at 0.5: the loop slides, it does not snap.");
+  var grid = linspace(0,1,400);
+  var curve = grid.map(function(g){ return S(p.beta*(g-0.5)); });
+  var svg = svgLines("fixed points, beta = "+g3(p.beta), "g", "update",
+    [{label:"S(beta*(g-0.5))", xs:grid, ys:curve}, {label:"g", xs:grid, ys:grid}],
+    {points: fps.map(function(f){ return [f[0], f[0], f[1]]; })});
+  return {svgs:[svg], text:L.join("\n")};
+}
+
+function viewSweep(p){
+  var Imax=4.0, nPts=161;
+  var ups = linspace(-Imax, Imax, nPts), downs = ups.slice().reverse();
+  var g = settle(p, ups[0], 0.02), gUp=[], gDown=[];
+  ups.forEach(function(d){ g = settle(p, d, g); gUp.push(g); });
+  downs.forEach(function(d){ g = settle(p, d, g); gDown.push(g); });
+  var area = loopArea(ups.concat(downs), gUp.concat(gDown));
+  var L = ["reversible drive sweep, beta = " + g3(p.beta),
+           "  drive I from " + (-Imax).toFixed(1) + " up to " + Imax.toFixed(1) + " and back",
+           "  hysteresis loop area = " + area.toFixed(2)];
+  L.push(area>0.3 ? "  the paths differ: history-dependent, the malfunction signature."
+                  : "  the paths lie on top of each other: it slides, no memory.");
+  L.push("  up:   " + sparkline(downsample(gUp, 60), 0, 1));
+  L.push("  down: " + sparkline(downsample(gDown, 60), 0, 1));
+  var svg = svgLines("sweep, beta = "+g3(p.beta)+", area = "+area.toFixed(2), "drive I", "g",
+    [{label:"up", xs:ups, ys:gUp}, {label:"down", xs:downs, ys:gDown}]);
+  return {svgs:[svg], text:L.join("\n")};
+}
+
+function viewRecover(p){
+  var betas=[1.0,2.0,3.0,3.5,3.8,3.9,3.95], nudge=0.1, tol=0.05*nudge, Tmax=600.0;
+  var L = ["critical slowing down: recovery time, variance, lag-1 autocorrelation",
+           "  beta      return time     variance     AR(1)"];
+  var rts=[], ars=[];
+  betas.forEach(function(beta){
+    var q = Object.assign(defaults(), {beta:beta, tau_g:p.tau_g, dt:p.dt, noise:0});
+    var r = simulate(q, Tmax, 1, null, 0.5+nudge, 0.5, null);
+    var rt = Tmax;
+    for(var s=0;s<r.g.length;s++){ if(Math.abs(r.g[s][0]-0.5) < tol){ rt = s*q.dt; break; } }
+    rts.push(rt);
+    var qn = Object.assign(defaults(), {beta:beta, tau_g:p.tau_g, dt:p.dt, noise:0.01, seed:1});
+    var rn = simulate(qn, 400.0, 1, null, 0.5, 0.5, gaussFactory(1));
+    var x = [];
+    for(var s=1000;s<rn.g.length;s++) x.push(rn.g[s][0]-0.5);
+    var v = pstdev(x); v=v*v;
+    var ar1 = pearson(x.slice(0,-1), x.slice(1));
+    ars.push(ar1);
+    L.push("  " + pad(g3(beta),8) + "  " + lpad(rt.toFixed(1),10) + "   " + lpad(v.toExponential(2),10) + "   " + lpad(ar1.toFixed(3),6));
+  });
+  L.push("  return time, variance, and AR(1) all climb as beta -> 4: the fold.");
+  L.push("  (a fold signature: bipolar, and the onset of psychosis. The established,");
+  L.push("   fragmented schizophrenic state is chaos, not a fold, and does not slow.)");
+  var svg1 = svgLines("critical slowing: return time", "beta", "return time",
+    [{label:"return time", xs:betas, ys:rts}], {markers:true});
+  var svg2 = svgLines("critical slowing: lag-1 autocorrelation", "beta", "AR(1)",
+    [{label:"AR(1)", xs:betas, ys:ars}], {markers:true});
+  return {svgs:[svg1, svg2], text:L.join("\n")};
+}
+
+function viewSeries(p){
+  if(p.noise === 0) p.noise = 0.02;
+  var T=1000.0;
+  var r = simulate(p, T, 1, null, 0.5, 0.5, gaussFactory(p.seed));
+  var meanG = col(r.g, 0);
+  var L = ["time series, beta = "+g3(p.beta)+", ka = "+g3(p.ka)+", c = "+g3(p.c),
+           "  g:  " + sparkline(downsample(meanG, 70), -0.1, 1.1)];
+  if(p.adapt && p.ka>0) L.push("  a:  " + sparkline(downsample(r.a, 70), -0.1, 1.1));
+  var crossings=0;
+  for(var i=0;i<meanG.length-1;i++){ if((meanG[i]>0.5) !== (meanG[i+1]>0.5)) crossings++; }
+  L.push("  range " + Math.min.apply(null,meanG).toFixed(2) + " to " + Math.max.apply(null,meanG).toFixed(2) + ", crossings of the middle: " + crossings);
+  if(p.ka>=4 && p.beta>4 && p.adapt) L.push("  a slow, coherent oscillation: the operating point cycles and returns.");
+  else if(p.beta>4) L.push("  it falls into an arm and stays: no stable middle to rest at.");
+  else L.push("  monostable: small wandering around the single resting state.");
+  var t = downsample(r.t, 2000), gp = downsample(meanG, 2000);
+  var series = [{label:"g", xs:t, ys:gp}];
+  if(p.ka>0) series.push({label:"a (slow)", xs:t, ys:downsample(r.a, 2000)});
+  return {svgs:[svgLines("series", "time", "g", series)], text:L.join("\n")};
+}
+
+function viewIntegration(p){
+  if(p.noise === 0) p.noise = 0.05;
+  var n=12, T=2000.0;
+  var r = simulate(p, T, n, null, 0.5, 0.5, gaussFactory(p.seed));
+  var half = Math.floor(r.g.length/2), spreads=[];
+  for(var s=half;s<r.g.length;s++) spreads.push(pstdev(r.g[s]));
+  var spread = mean(spreads);
+  var gd = downsample(r.g, 60);
+  var mat = [];
+  for(var ch=0;ch<n;ch++){ mat.push(gd.map(function(row){ return row[ch]; })); }
+  var L = ["integration across " + n + " channels, c = " + g3(p.c),
+           heatmapAscii(mat),
+           "  cross-channel spread = " + spread.toFixed(3)];
+  if(spread<0.1) L.push("  one coherent field: the channels move together.");
+  else { L.push("  fragmented: the channels fall into different basins.");
+         L.push("  the established schizophrenic state: chaos, not a fold."); }
+  var wide = downsample(r.g, 240), mat2 = [];
+  for(var ch=0;ch<n;ch++){ mat2.push(wide.map(function(row){ return row[ch]; })); }
+  return {svgs:[svgHeatmap("integration, spread = "+spread.toFixed(3), mat2)], text:L.join("\n")};
+}
+
+function viewProfileAdhd(p){
+  var delay = linspace(0,10,41);
+  var weight = delay.map(function(d){ return settle(p, 4.0*(1.0/(1.0+p.k*d) - 0.5), 0.5); });
+  var L = ["adhd profile: weight vs reward delay, k = " + g3(p.k),
+           "  delay:       now " + rep("-",52) + " later",
+           "  weight:      " + sparkline(downsample(weight, 50), 0, 1),
+           "  crossover at delay ~ " + (1.0/p.k).toFixed(2) + "; weight piled on the immediate (" + weight[0].toFixed(2) + ")",
+           "  and starved from the delayed (" + weight[weight.length-1].toFixed(2) + ").",
+           "  both arms at once, held steady: a miscalibration, not a swing."];
+  return {svgs:[svgLines("adhd profile", "reward delay", "weight", [{label:"weight", xs:delay, ys:weight}])], text:L.join("\n")};
+}
+
+function viewProfileAutism(p){
+  var vol = linspace(0,1,41);
+  var driveOpt = vol.map(function(v){ return 3.0*(1.0-2.0*v); });
+  var gOpt = driveOpt.map(function(d){ return settle(p, d, 0.5); });
+  var realized = driveOpt.map(function(d){ return settle(p, p.lam*d, 0.5); });
+  var mismatch = vol.map(function(v,i){ return realized[i]-gOpt[i]; });
+  var lo=Math.min.apply(null,mismatch), hi=Math.max.apply(null,mismatch);
+  var L = ["autism profile: gain mismatch vs volatility, lam = " + g3(p.lam),
+           "  volatility:  stable " + rep("-",50) + " volatile",
+           "  mismatch:    " + sparkline(downsample(mismatch, 50)),
+           "  mismatch spans " + lo.toFixed(2) + " to " + hi.toFixed(2) + " (negative = gain too low,",
+           "  collapse; positive = gain too high, flooding)"];
+  L.push((hi-lo>0.1) ? "  a stuck gain: too low in stable contexts, too high in volatile ones."
+                     : "  a flexible gain tracks the context: almost no mismatch.");
+  L.push("  a fixed profile either way: it slides with the environment, never switches.");
+  return {svgs:[svgLines("autism profile", "volatility", "gain mismatch", [{label:"gain mismatch", xs:vol, ys:mismatch}])], text:L.join("\n")};
+}
+
+function pad(s, w){ s=String(s); while(s.length<w) s+=" "; return s; }
+function lpad(s, w){ s=String(s); while(s.length<w) s=" "+s; return s; }
+function rep(ch, n){ var s=""; for(var i=0;i<n;i++) s+=ch; return s; }
+
+var RUNNERS = {
+  fp: viewFp, sweep: viewSweep, recover: viewRecover, series: viewSeries,
+  integration: viewIntegration, profile_adhd: viewProfileAdhd, profile_autism: viewProfileAutism
+};
+
+// Which knobs each view actually reads. A view computes with only these; the
+// rest stay at their defaults, so (for example) switching to `sweep` from the
+// bipolar preset still shows a clean hysteresis loop rather than dragging the
+// oscillator's ka along. The UI dims the knobs a view ignores using this map.
+var VIEW_USES = {
+  fp: ["beta"], sweep: ["beta"], recover: [],
+  series: ["beta", "I", "ka", "c", "noise"],
+  integration: ["beta", "c", "noise"],
+  profile_adhd: ["k"], profile_autism: ["lam"]
+};
+
+function runView(view, state){
+  var uses = VIEW_USES[view] || [];
+  var p = defaults();
+  ["beta", "I", "ka", "c", "k", "lam", "noise"].forEach(function(key){
+    if(uses.indexOf(key) >= 0 && state[key] !== undefined) p[key] = state[key];
+  });
+  p.adapt = (state.adapt !== undefined) ? state.adapt : 1;
+  return (RUNNERS[view] || viewFp)(p);
+}
+
+// ---- UI --------------------------------------------------------------------
+
+var KNOBS = [
+  {key:"beta", name:"beta - stability (fold at 4)", min:0, max:10, step:0.05},
+  {key:"I", name:"I - external drive", min:-4, max:4, step:0.05},
+  {key:"ka", name:"ka - slow bar strength", min:0, max:8, step:0.1},
+  {key:"c", name:"c - integration coupling", min:0, max:4, step:0.05},
+  {key:"k", name:"k - discount steepness (ADHD)", min:0.05, max:1.5, step:0.01},
+  {key:"lam", name:"lam - flexibility (autism)", min:0, max:1, step:0.01},
+  {key:"noise", name:"noise", min:0, max:0.2, step:0.005}
+];
+var DEF = {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, noise:0, adapt:1};
+var PRESETS = {
+  baseline:{beta:2}, schizophrenia:{beta:8, c:0.2, ka:0},
+  bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, k:0.95}, autism:{beta:2, lam:0.1}
+};
+var VIEWS = [
+  {key:"series", label:"series", hint:"Time series of the field. Try the bipolar preset for the oscillation."},
+  {key:"fp", label:"fixed points", hint:"Resting states. Two arms appear once beta passes 4."},
+  {key:"sweep", label:"sweep", hint:"Reversible drive sweep. A folded loop takes a different path up than down."},
+  {key:"recover", label:"recover", hint:"Sweeps beta itself: recovery time, variance, and autocorrelation blow up nearing the fold."},
+  {key:"integration", label:"integration", hint:"12 channels. High c stays one field; low c fragments."},
+  {key:"profile_adhd", label:"ADHD profile", hint:"Weight vs reward delay: a fixed two-armed curve."},
+  {key:"profile_autism", label:"autism profile", hint:"Gain mismatch vs volatility: a fixed two-armed curve."}
+];
+
+var state = Object.assign({}, DEF);
+var view = "series";
+var timer = null;
+function el(id){ return document.getElementById(id); }
+
+function buildViews(){
+  var box = el("views");
+  VIEWS.forEach(function(v){
+    var b = document.createElement("button");
+    b.textContent = v.label; b.dataset.key = v.key;
+    b.onclick = function(){ view = v.key; markViews(); applyDim(); run(); };
+    box.appendChild(b);
+  });
+}
+function currentView(){ for(var i=0;i<VIEWS.length;i++){ if(VIEWS[i].key===view) return VIEWS[i]; } return VIEWS[0]; }
+function markViews(){
+  el("viewhint").textContent = currentView().hint;
+  Array.prototype.forEach.call(el("views").children, function(b){ b.classList.toggle("active", b.dataset.key===view); });
+}
+function buildSliders(){
+  var box = el("sliders");
+  KNOBS.forEach(function(kn){
+    var wrap = document.createElement("div"); wrap.className="slider"; wrap.dataset.key=kn.key;
+    var row = document.createElement("div"); row.className="row";
+    var nm = document.createElement("span"); nm.className="name"; nm.textContent=kn.name;
+    var val = document.createElement("span"); val.className="val"; val.id="v_"+kn.key;
+    row.appendChild(nm); row.appendChild(val);
+    var inp = document.createElement("input");
+    inp.type="range"; inp.min=kn.min; inp.max=kn.max; inp.step=kn.step; inp.id="s_"+kn.key;
+    inp.oninput = function(){
+      state[kn.key] = parseFloat(inp.value);
+      val.textContent = (+state[kn.key]).toFixed(2);
+      el("preset").value = "custom";
+      schedule();
+    };
+    wrap.appendChild(row); wrap.appendChild(inp); box.appendChild(wrap);
+  });
+}
+function syncSliders(){
+  KNOBS.forEach(function(kn){ el("s_"+kn.key).value = state[kn.key]; el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2); });
+  el("adapt").checked = !!state.adapt;
+}
+function applyDim(){
+  var uses = VIEW_USES[view] || [];
+  Array.prototype.forEach.call(el("sliders").children, function(w){
+    w.classList.toggle("dim", uses.indexOf(w.dataset.key) < 0);
+  });
+}
+function applyPreset(name){
+  state = Object.assign({}, DEF);
+  if(PRESETS[name]) Object.assign(state, PRESETS[name]);
+  state.adapt = el("adapt").checked ? 1 : 0;
+  syncSliders();
+}
+function schedule(){ if(timer) clearTimeout(timer); timer = setTimeout(run, 60); }
+function run(){
+  // compute on a tick so the slider thumb stays responsive
+  setTimeout(function(){
+    var out;
+    try { out = runView(view, state); }
+    catch(e){ el("text").textContent = "error: " + e; return; }
+    el("plots").innerHTML = out.svgs.join("");
+    el("text").textContent = out.text;
+  }, 0);
+}
+
+el("preset").onchange = function(){ if(this.value!=="custom") applyPreset(this.value); run(); };
+el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; schedule(); };
+
+buildViews();
+buildSliders();
+applyPreset("bipolar");
+el("preset").value = "bipolar";
+markViews();
+applyDim();
+run();
+</script>
+</body>
+</html>

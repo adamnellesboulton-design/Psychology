@@ -92,12 +92,30 @@ self-contained SVG files to `out/` (any browser opens them; no libraries needed)
 
 ## Browser UI
 
-`python allocator_toy.py app` serves a small single-page UI on localhost (it opens
-your browser, or pass `--no-browser` and visit the printed URL). It has a slider for
-every knob, a preset menu, and a view switch (fixed points, sweep, recover, series,
-integration, the two profiles); move a slider and the model reruns, redrawing the
-plot and the narration. Like everything else it is pure standard library, served by
-Python's built-in `http.server`: nothing to install.
+The UI is `docs/index.html`: one self-contained page that runs the whole model in
+the browser (a faithful JavaScript port of the update rule in `allocator_toy.py`),
+with a slider for every knob, a preset menu, and a view switch (fixed points, sweep,
+recover, series, integration, the two profiles). Move a slider and the model reruns,
+redrawing the plot and the narration. No build step and no dependencies; each view
+computes with only the knobs it uses, so the rest stay dimmed.
+
+Three ways to open it:
+
+- Just open `docs/index.html` in a browser (works straight from disk, `file://`).
+- `python allocator_toy.py app` serves it on localhost (opens your browser, or pass
+  `--no-browser` and visit the printed URL). This is only a static file server; the
+  page does the computing.
+- Host it on GitHub Pages (below).
+
+## Run it online (GitHub Pages)
+
+The page is fully static, so GitHub Pages can host it as-is. A workflow at
+`.github/workflows/pages.yml` publishes the `docs/` folder automatically on every
+push. To turn it on once: in the repository, go to Settings > Pages > Build and
+deployment, and set Source to "GitHub Actions". After that, pushes to the default
+branch redeploy the site, and the live URL runs entirely in the visitor's browser
+(no server). If you prefer no workflow, you can instead set Source to "Deploy from a
+branch" and point it at the default branch with the `/docs` folder.
 
 ## What the model is demonstrating (and what you should see)
 
@@ -146,9 +164,17 @@ Python's built-in `http.server`: nothing to install.
 
 ## Files
 
-    allocator_toy.py   the whole model and CLI: the update rule, eight commands,
-                       ASCII rendering, and a built-in SVG plotter. Pure Python
-                       standard library; runs anywhere python does, no installs.
+    allocator_toy.py   the model and CLI: the update rule, the commands, ASCII
+                       rendering, and a built-in SVG plotter. Pure Python standard
+                       library; runs anywhere python does, no installs.
+    docs/index.html    the browser UI: a self-contained page that runs the same
+                       model client-side (a JS port of the update rule). What the
+                       `app` command serves and what GitHub Pages hosts.
+    .github/workflows/pages.yml   publishes docs/ to GitHub Pages on push.
+
+The update rule lives in two places now, Python (the CLI, the reference) and the
+JavaScript port inside docs/index.html (so it can run in a browser with nothing
+installed). They are kept in step; change one, change the other.
 
 ## House rules if Claude Code edits this
 
