@@ -507,7 +507,6 @@ var VIEWS = [
 
 var state = Object.assign({}, DEF);
 var view = "series";
-var timer = null;
 function el(id){ return document.getElementById(id); }
 
 function buildViews(){
@@ -515,7 +514,7 @@ function buildViews(){
   VIEWS.forEach(function(v){
     var b = document.createElement("button");
     b.textContent = v.label; b.dataset.key = v.key;
-    b.onclick = function(){ view = v.key; markViews(); applyDim(); run(); };
+    b.onclick = function(){ view = v.key; markViews(); applyDim(); render(); };
     box.appendChild(b);
   });
 }
@@ -538,7 +537,7 @@ function buildSliders(){
       state[kn.key] = parseFloat(inp.value);
       val.textContent = (+state[kn.key]).toFixed(2);
       el("preset").value = "custom";
-      schedule();
+      requestRender();
     };
     wrap.appendChild(row); wrap.appendChild(inp); box.appendChild(wrap);
   });
@@ -559,20 +558,29 @@ function applyPreset(name){
   state.adapt = el("adapt").checked ? 1 : 0;
   syncSliders();
 }
-function schedule(){ if(timer) clearTimeout(timer); timer = setTimeout(run, 60); }
-function run(){
-  // compute on a tick so the slider thumb stays responsive
-  setTimeout(function(){
-    var out;
-    try { out = runView(view, state); }
-    catch(e){ el("text").textContent = "error: " + e; return; }
-    el("plots").innerHTML = out.svgs.join("");
-    el("text").textContent = out.text;
-  }, 0);
+// Live updates while dragging: render at most once per animation frame, so the
+// graph keeps up with the slider in real time without piling up recomputations.
+// A frame coalesces however many input events land within it; the heavier views
+// simply redraw as fast as they compute.
+var rafPending = false;
+function requestRender(){
+  if(rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(function(){
+    rafPending = false;
+    render();
+  });
+}
+function render(){
+  var out;
+  try { out = runView(view, state); }
+  catch(e){ el("text").textContent = "error: " + e; return; }
+  el("plots").innerHTML = out.svgs.join("");
+  el("text").textContent = out.text;
 }
 
-el("preset").onchange = function(){ if(this.value!=="custom") applyPreset(this.value); run(); };
-el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; schedule(); };
+el("preset").onchange = function(){ if(this.value!=="custom") applyPreset(this.value); render(); };
+el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; requestRender(); };
 
 buildViews();
 buildSliders();
@@ -580,7 +588,7 @@ applyPreset("bipolar");
 el("preset").value = "bipolar";
 markViews();
 applyDim();
-run();
+render();
 </script>
 </body>
 </html>

@@ -95,7 +95,8 @@ self-contained SVG files to `out/` (any browser opens them; no libraries needed)
 The UI is `docs/index.html`: one self-contained page that runs the whole model in
 the browser (a faithful JavaScript port of the update rule in `allocator_toy.py`),
 with a slider for every knob, a preset menu, and a view switch (fixed points, sweep,
-recover, series, integration, the two profiles). Move a slider and the model reruns,
+recover, series, integration, the two profiles). Drag a slider and the graph updates
+live, in real time: the model recomputes once per animation frame as the knob moves,
 redrawing the plot and the narration. No build step and no dependencies; each view
 computes with only the knobs it uses, so the rest stay dimmed.
 
