@@ -638,7 +638,7 @@ def cmd_integration(args):
     if p.noise == 0.0:
         p.noise = 0.05
     n = 12
-    T = 2000.0
+    T = 1000.0
     t, g, a = simulate(p, T, n=n, g0=0.5, a0=0.5, rng=random.Random(p.seed))
 
     # Cross-channel spread: how far apart the channels sit, averaged over the
