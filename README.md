@@ -27,45 +27,46 @@ integration experiment).
 
 ## The knobs, and what each one is in the paper
 
-    beta   self-reinforcement / loop gain.  The STABILITY setting.
-           This is the master switch for the kind of fault. The recurrent term
-           beta*(g-0.5) is positive feedback: high g raises the precision of the
-           evidence that supports high g. Below beta=4 the loop has one resting
-           state and slides; above beta=4 it folds into two resting states (the
-           two arms) with an unstable threshold between them. beta=4 is the
-           tipping point.
+    beta   self-reinforcement / loop gain. The recurrent term beta*(g-0.5) is
+           positive feedback: winning begets winning. It is the engine behind both
+           bifurcations. With the homeostat off, beta>4 folds the loop into two
+           basins; beta=4 is that fold.
     I      external drive: stress, a salient input, a dopaminergic fluctuation.
-    ka     strength of the slow variable a, "the bar": the level of relevance the
-           regulator demands before it admits a bid. With a folded loop, ka>4 turns
-           the system into a relaxation oscillator (the bar drifts up under the
-           flood until it tips, then back down: the bipolar mechanism).
-    c      integration coupling across channels: the single weighting laid over
-           the whole contest. High c keeps the field one coherent thing; low c
-           lets the channels fall into different basins (fragmentation).
+    ka     HOMEOSTAT strength. The homeostat sets the bar (the slow variable a:
+           the level of relevance a bid must clear) and opposes the loop, so the
+           effective gain is beta-ka. It keeps a single euthymic resting state
+           rather than two basins, but past its HOPF that state loses its damping
+           and the field orbits euthymia -- the bipolar swing.
+    c      INTEGRATING gain / coupling across channels: the binding of the field
+           into one coherent state. High c keeps the field one thing; low c lets
+           the channels fall into different basins. Its FOLD is schizophrenia.
     k      steepness of temporal discounting. The ADHD target.
     lam    flexibility: how fast gain tracks context volatility. The autism target.
 
-Two ways to disturb the contest, and they are different knobs:
-- MALFUNCTION = the loop loses stability. You raise `beta` past 4. The fault is
-  dynamical; the output moves.
-- MISCALIBRATION = the loop is fine (`beta` low) but a target is set oddly. You
-  change `k` or `lam`. The fault is a fixed offset; the output holds still.
+The allocator runs two slow controls, and the whole cut is that the two
+malfunctions are each one of them crossing a different bifurcation:
+- the INTEGRATING GAIN crosses a FOLD: two basins with a tipping point between,
+  so a field that loses coherence tips into the captured basin and, across many
+  channels, fragments and does not return -> schizophrenia.
+- the HOMEOSTAT crosses a HOPF: euthymia is a single fixed point that loses its
+  damping, so the field swings around it and back rather than resting -> bipolar.
+  Because the centre survives, a euthymic baseline remains to return to, which a
+  fold would not leave.
+- MISCALIBRATION = both controls intact (`beta` low), a target (`k` or `lam`) set
+  oddly: a fixed two-armed offset that never switches -> ADHD, autism.
 
-And the split within the malfunctions is which variable the positive feedback
-destabilizes:
-- the operating point, while the integrating coupling stays intact  -> oscillates,
-  returns                                                            -> bipolar
-- the integrating coupling itself                                    -> fragments,
-  does not return                                                    -> schizophrenia
+The two bifurcations even slow differently as they near the edge, which says which
+tip is coming: a fold slows monotonically, a Hopf rings, the wobble growing and
+lengthening as the damping dies.
 
 ## The four conditions as presets
 
     preset          regime                              knobs              signature
-    baseline        monostable                          beta=2             slides, recovers fast
-    schizophrenia   folded loop, integration failed     beta=8, c=0.2      fragments, no return
-    bipolar         folded loop, integration intact     beta=8, c=3, ka=6  slow coherent oscillation
-    adhd            monostable, steep target            beta=2, k=0.95     two-armed over delay
-    autism          monostable, stuck target            beta=2, lam=0.1    two-armed over volatility
+    baseline        rests at euthymia                   beta=2             slides, recovers fast
+    schizophrenia   integrating gain folds              beta=8, c=0.2      fragments, no return
+    bipolar         homeostat crosses a Hopf            beta=8, c=3, ka=6  swings around euthymia
+    adhd            both controls intact, steep target  beta=2, k=0.95     two-armed over delay
+    autism          both controls intact, stuck target  beta=2, lam=0.1    two-armed over volatility
 
 ## Run it
 
@@ -129,28 +130,28 @@ the hosted site needs none.
 
 ## What the model is demonstrating (and what you should see)
 
-- One number, `beta`, sorts the kinds of fault. `fp` shows beta=2 has a single
-  resting state at 0.5 (it slides) while beta=8 has two at about 0.02 and 0.98
-  (it snaps between arms). Nothing else changed.
+- `fp` reads the resting states off the effective gain (beta-ka). With the homeostat
+  off, beta=2 has a single euthymic state (it slides) and beta=8 has folded into two
+  basins at about 0.02 and 0.98 (schizophrenia). With the homeostat on (bipolar:
+  beta=8, ka=6), the effective gain is 2, so there is a single euthymic state again
+  -- but it has lost its damping, so the field orbits it (the Hopf).
 - Malfunction versus miscalibration shows up under a reversible sweep. At beta=8
   the drive-up and drive-down paths differ (hysteresis loop area about 2.1); at
   beta=2 they lie on top of each other (area ~ 0). The malfunction's state depends
   on where it has been; the miscalibration's does not.
-- Approaching the fold, recovery from a nudge slows without bound. `recover` shows
-  return time climbing from about 3 to over 160 time units, and the variance and
-  lag-1 autocorrelation of the fluctuations both climbing (autocorrelation rising to
-  1.00) as beta goes from 1 to 3.95. That is the critical-slowing signature, and it
-  is measurable without watching the system switch. Critical slowing is a fold
-  signature specifically: it belongs to bipolar disorder and to the onset of
-  psychosis, not to the established, fragmented schizophrenic state (which is chaos,
-  not a fold, and does not slow).
-- The two malfunctions differ by which variable folds. `series --preset bipolar`
-  is a slow recurrent oscillation; `integration --preset bipolar` keeps all channels
-  synchronized (cross-channel spread ~ 0): one coherent field that returns each cycle.
-  `integration --preset schizophrenia` lets the channels scatter into different basins
-  (spread ~ 0.45) and stay there: no single field, no return. That fragmentation is
-  the established schizophrenic state; its signature is the lost integration itself,
-  not an approach to a tipping point.
+- Approaching either edge, recovery from a nudge slows -- the early warning,
+  measurable before anything switches (`recover` shows return time climbing from
+  about 4 to over 200). But the two malfunctions slow in different shapes, and the
+  shape says which tip is coming: a fold (the integrating gain, the onset of
+  psychosis) creeps back monotonically, while a Hopf (the homeostat, bipolar) rings,
+  the wobble growing and lengthening as the damping dies. (The established,
+  fragmented schizophrenic state is chaos rather than a fold, so it does not slow.)
+- The two malfunctions differ by which control fails. `series --preset bipolar`
+  swings around euthymia and back (the homeostat's Hopf); `integration --preset
+  bipolar` keeps all channels synchronized (cross-channel spread ~ 0): one coherent
+  field that returns each cycle. `integration --preset schizophrenia` lets the
+  channels scatter into different basins (spread ~ 0.45) and stay: the integrating
+  gain has folded, no single field, no return.
 - The miscalibrations never switch. `profile --preset adhd` is a fixed curve, weight
   piled on the immediate option and starved from the delayed one, both at once.
   `profile --preset autism` is a fixed mismatch that is positive (gain too high,

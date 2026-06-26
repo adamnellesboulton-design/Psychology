@@ -20,19 +20,28 @@ of one variable. The whole model is one update rule run with different knobs:
     da/dt   = ( mean(g) - a ) / tau_a          # slow; only the oscillator uses it
 
 S is the logistic squash; i indexes channels (1 by default, 12 for integration).
-a is "the bar" of the paper: the level of relevance the regulator demands before
+a is "the bar" of the paper: the level of relevance the homeostat demands before
 it admits a bid, drifting slowly against whichever state the field is in. The
 knobs map to named settings in the paper (see the Params class and README):
-beta = stability (loop gain; beta=4 is the fold), I = external drive,
-ka = strength of the slow bar a, c = integration coupling across channels,
-k = discount steepness (ADHD target), lam = flexibility (autism target).
+beta = self-reinforcement / loop gain, I = external drive, ka = strength of the
+slow homeostat that sets the bar a, c = integrating gain / coupling across
+channels, k = discount steepness (ADHD target), lam = flexibility (autism).
 
-MALFUNCTION = the loop loses stability (raise beta past 4); the output moves.
-MISCALIBRATION = the loop is fine (beta low) but a target (k or lam) is set odd;
-the output holds a fixed offset. Within the malfunctions, the positive feedback
-destabilizes either the operating point (integration intact) -> oscillates,
-returns -> bipolar, or the integrating coupling itself -> fragments, no return
--> schizophrenia.
+The allocator runs two slow controls, and the two malfunctions are each one of
+them crossing a different bifurcation -- the whole cut of the theory:
+- the INTEGRATING GAIN (coherence; c) crosses a FOLD. Past beta=4 the loop is
+  bistable, two basins with a tipping point between; across many channels with
+  weak coupling the field fragments and does not return -> schizophrenia.
+- the HOMEOSTAT (the bar; ka, a) crosses a HOPF. The homeostat opposes the
+  self-reinforcement, so the effective gain is beta-ka and a single euthymic
+  resting state survives; but it can lose its damping (trace > 0) and the field
+  orbits euthymia instead of resting at it -> bipolar. A euthymic baseline
+  remains to return to, which a fold would not leave.
+The two slowings differ and say which tip is coming: a fold slows monotonically,
+a Hopf rings, the wobble growing and lengthening as the damping dies.
+
+MISCALIBRATION = both controls intact (beta low) but a target (k or lam) set odd;
+the output holds a fixed two-armed offset and never switches -> ADHD, autism.
 
 House rules if Claude Code edits this:
 - ASCII only. No em or en dashes, no curly quotes, no unicode math or block
@@ -112,10 +121,10 @@ class Params:
 
     def __init__(self, beta=2.0, I=0.0, ka=0.0, c=1.0, k=0.2, lam=1.0,
                  adapt=True, noise=0.0, tau_g=1.0, tau_a=40.0, dt=0.05, seed=0):
-        self.beta = beta      # stability setting (loop gain)
+        self.beta = beta      # self-reinforcement / loop gain (the fold engine)
         self.I = I            # external drive
-        self.ka = ka          # strength of the slow bar a (the relevance level demanded)
-        self.c = c            # integration coupling across channels
+        self.ka = ka          # homeostat strength (sets the bar a; its Hopf is bipolar)
+        self.c = c            # integrating gain / coupling (its fold is schizophrenia)
         self.k = k            # discount steepness (ADHD target; profile only)
         self.lam = lam        # flexibility (autism target; profile only)
         self.adapt = adapt    # engage the slow variable a
@@ -433,32 +442,48 @@ def resolve_params(args):
 # ----------------------------------------------------------------------------
 
 def cmd_fp(args):
-    """Stable fixed points. Two arms appear past beta=4."""
+    """Resting states, and the two ways they can go unstable. The homeostat
+    opposes the self-reinforcement, so the loop's effective gain is beta - ka.
+    With the homeostat off (ka=0) a strong loop folds into two basins -- the
+    fold behind schizophrenia. With it on, even a strong loop keeps a single
+    euthymic resting state, but that state can lose its damping and orbit -- the
+    Hopf behind bipolar."""
     p = resolve_params(args)
-    fps = fixed_points(p.beta)
-    print("fixed points of the single-channel loop, beta = %.3g" % p.beta)
-    print("  (beta=4 is the fold; below it one resting state, above it two)")
+    ge = p.beta - (p.ka if p.adapt else 0.0)
+    fps = fixed_points(ge)
+    # 2D Jacobian trace at euthymia decides whether the single point rings (Hopf).
+    trace = (0.25 * p.beta - 1.0) / p.tau_g - 1.0 / p.tau_a
+    hopf = (len(fps) == 1 and trace > 0.0)
+    print("resting states, beta = %.3g, ka = %.3g  (effective gain beta-ka = %.3g)"
+          % (p.beta, p.ka if p.adapt else 0.0, ge))
     for g, stable in fps:
-        kind = "stable  " if stable else "unstable"
+        st = stable and not hopf
+        kind = "stable  " if st else ("orbited " if hopf else "unstable")
         arm = ""
-        if stable and g > 0.6:
+        if st and g > 0.6:
             arm = "  <- flooding arm"
-        elif stable and g < 0.4:
+        elif st and g < 0.4:
             arm = "  <- collapse arm"
+        elif hopf:
+            arm = "  <- euthymia (the swing orbits this)"
         print("  g* = %.4f   %s%s" % (g, kind, arm))
-    n_stable = sum(1 for _, s in fps if s)
-    if n_stable >= 2:
-        print("two arms: the loop has folded.")
+    if len(fps) >= 3:
+        print("a fold: two basins with a tipping point between. The integrating")
+        print("gain has folded -- it falls into one basin and stays (schizophrenia).")
+    elif hopf:
+        print("a Hopf: one euthymic resting state, but it has lost its damping, so")
+        print("the allocator orbits euthymia instead of resting at it (bipolar).")
     else:
-        print("one resting state at 0.5: the loop slides, it does not snap.")
+        print("one calm resting state at euthymia: nudge it and it settles back.")
 
     if maybe_plot(args):
         grid = linspace(0.0, 1.0, 400)
-        curve = [S(p.beta * (g - 0.5)) for g in grid]
-        save_svg_lines("fp_beta%s" % _num(p.beta), "fixed points, beta = %s" % _num(p.beta),
-                       "g", "update",
-                       [("S(beta*(g-0.5))", grid, curve), ("g", grid, grid)],
-                       points=[(g, g, st) for g, st in fps])
+        curve = [S(ge * (g - 0.5)) for g in grid]
+        title = ("Where the allocator can settle (effective gain %.3g)" % ge)
+        save_svg_lines("fp_beta%s" % _num(p.beta), title,
+                       "its state: collapsed -> flooded", "where it moves next",
+                       [("next state", grid, curve), ("stays put", grid, grid)],
+                       points=[(g, g, st and not hopf) for g, st in fps])
 
 
 def cmd_sweep(args):
@@ -500,21 +525,23 @@ def cmd_sweep(args):
 
 
 def cmd_recover(args):
-    """Critical slowing down. As beta approaches the fold, recovery from a
-    nudge slows without bound and the variance and lag-1 autocorrelation of
-    the fluctuations climb. This is the early-warning signature of a fold
-    specifically (bipolar disorder, and the onset of psychosis); the
-    established, fragmented schizophrenic state is chaos, not a fold, and is
-    not expected to slow."""
+    """Critical slowing down, and the two shapes it takes. Approaching either
+    bifurcation the allocator recovers more and more slowly from a nudge -- the
+    early warning, measurable before anything switches. But the two malfunctions
+    slow differently, and the difference says which tip is coming: a fold (the
+    integrating gain, schizophrenia's onset) creeps back monotonically, while a
+    Hopf (the homeostat, bipolar) rings, the wobble growing and lengthening as
+    the damping dies."""
     p = resolve_params(args)
     betas = [1.0, 2.0, 3.0, 3.5, 3.8, 3.9, 3.95]
     nudge = 0.1
     tol = 0.05 * nudge
     T_max = 600.0
 
-    print("critical slowing down: recovery time, variance, lag-1 autocorrelation")
-    print("  beta      return time     variance     AR(1)")
-    return_times, variances, ar1s = [], [], []
+    # The shared early warning: recovery time climbing toward the edge (fold).
+    print("critical slowing down: the early warning, and which tip is coming")
+    print("  approaching the edge, recovery from a nudge slows -- the early warning:")
+    return_times, ar1s = [], []
     for beta in betas:
         q = Params(beta=beta, tau_g=p.tau_g, dt=p.dt, noise=0.0)
         _, g, _ = simulate(q, T_max, n=1, g0=0.5 + nudge)
@@ -524,28 +551,46 @@ def cmd_recover(args):
                 rt = s * q.dt
                 break
         return_times.append(rt)
-
         qn = Params(beta=beta, tau_g=p.tau_g, dt=p.dt, noise=0.01, seed=1)
         _, gn, _ = simulate(qn, 400.0, n=1, g0=0.5)
         x = [gn[s][0] - 0.5 for s in range(1000, len(gn))]
-        var = pstdev(x) ** 2
-        ar1 = pearson(x[:-1], x[1:])
-        variances.append(var)
-        ar1s.append(ar1)
-        print("  %-8.3g  %10.1f   %10.2e   %6.3f" % (beta, rt, var, ar1))
-    print("  return time, variance, and AR(1) all climb as beta -> 4: the fold.")
+        ar1s.append(pearson(x[:-1], x[1:]))
+    print("    beta:        " + " ".join("%4.2g" % b for b in betas))
+    print("    return time: " + " ".join("%4.0f" % r for r in return_times))
+
+    # The discriminator: the SHAPE of the recovery near the edge. A fold (ka=0)
+    # crawls back without overshoot; a Hopf (homeostat engaged) rings.
+    T_shape = 200.0
+    fold = Params(beta=3.97, ka=0.0, noise=0.0, tau_g=p.tau_g, tau_a=p.tau_a, dt=p.dt)
+    hopf = Params(beta=3.97, ka=3.97, noise=0.0, tau_g=p.tau_g, tau_a=p.tau_a, dt=p.dt)
+    _, gf, _ = simulate(fold, T_shape, n=1, g0=0.5 + nudge)
+    _, gh, _ = simulate(hopf, T_shape, n=1, g0=0.5 + nudge)
+    fold_dev = [row[0] - 0.5 for row in gf]
+    hopf_dev = [row[0] - 0.5 for row in gh]
+    print("  but a fold and a Hopf slow differently, near the edge:")
+    print("    fold (schizophrenia), monotone crawl: "
+          + sparkline(downsample(fold_dev, 48), -nudge, nudge))
+    print("    Hopf (bipolar), a growing ring:       "
+          + sparkline(downsample(hopf_dev, 48), -nudge, nudge))
+    print("  the fold creeps to the edge without wobbling; the Hopf rings, and the")
+    print("  ring grows and lengthens as the damping dies -- that is which tip is near.")
 
     if maybe_plot(args):
-        save_svg_lines("recover_return", "critical slowing: return time",
-                       "beta", "return time", [("return time", betas, return_times)],
-                       markers=True)
-        save_svg_lines("recover_ar1", "critical slowing: lag-1 autocorrelation",
-                       "beta", "AR(1)", [("AR(1)", betas, ar1s)], markers=True)
+        save_svg_lines("recover_slowing", "Recovery slows approaching the edge",
+                       "toward the tipping point ->", "recovery time",
+                       [("recovery time", betas, return_times)], markers=True)
+        tt = [i * p.dt for i in range(len(fold_dev))]
+        save_svg_lines("recover_shape", "Two shapes of slowing near the edge",
+                       "time after a nudge", "distance from euthymia",
+                       [("fold: monotone crawl", tt, fold_dev),
+                        ("Hopf: a growing ring", tt, hopf_dev)])
 
 
 def cmd_series(args):
-    """Time series of the field. A folded oscillator (bipolar) cycles slowly;
-    a folded loop without recovery (schizophrenia) sits in a basin."""
+    """Time series of the field. With the homeostat past its Hopf (bipolar) the
+    single euthymic point loses its damping and the field swings around it and
+    back; a folded loop without the homeostat (schizophrenia) drops into a basin
+    and stays."""
     p = resolve_params(args)
     if p.noise == 0.0:
         p.noise = 0.02
@@ -564,12 +609,16 @@ def cmd_series(args):
                     if (mean_g[i] > 0.5) != (mean_g[i + 1] > 0.5))
     print("  range %.2f to %.2f, crossings of the middle: %d"
           % (min(mean_g), max(mean_g), crossings))
-    if p.ka >= 4 and p.beta > 4 and p.adapt:
-        print("  a slow, coherent oscillation: the operating point cycles and returns.")
-    elif p.beta > 4:
-        print("  it falls into an arm and stays: no stable middle to rest at.")
+    ge = p.beta - (p.ka if p.adapt else 0.0)
+    trace = (0.25 * p.beta - 1.0) / p.tau_g - 1.0 / p.tau_a
+    if p.adapt and p.ka > 0 and ge < 4 and trace > 0:
+        print("  a slow swing around euthymia: the homeostat has crossed its Hopf,")
+        print("  so the field rings between flood and collapse and back (bipolar).")
+    elif p.beta > 4 and ge >= 4:
+        print("  it falls into a basin and stays: the integrating gain has folded,")
+        print("  with no euthymic middle to return to (schizophrenia).")
     else:
-        print("  monostable: small wandering around the single resting state.")
+        print("  it rests near euthymia, wandering a little with the noise (stable).")
 
     if maybe_plot(args):
         series = [("g", t, mean_g)]
@@ -680,15 +729,22 @@ def cmd_demo(args):
     print("ALLOCATOR TOY MODEL: one update rule, two kinds of fault")
     print("=" * 70)
     print()
-    print("One number, beta, sorts the kinds of fault. It is the loop gain on")
-    print("self-supporting evidence. beta=4 is the tipping point.")
+    print("Two slow controls can lose stability, each at its own bifurcation,")
+    print("which is the whole cut. The integrating gain folds (schizophrenia);")
+    print("the homeostat that sets the bar crosses a Hopf (bipolar).")
     print()
 
-    print("-- fixed points: beta=2 slides, beta=8 has folded into two arms --")
+    print("-- the integrating gain folds: two basins past beta=4 --")
     for beta in (2.0, 8.0):
         fps = fixed_points(beta)
         stable = ["%.3f" % g for g, s in fps if s]
-        print("  beta=%.0f: stable resting states at %s" % (beta, ", ".join(stable)))
+        kind = "two basins (a fold)" if len(stable) >= 2 else "one euthymic point"
+        print("  beta=%.0f: resting states at %s  (%s)" % (beta, ", ".join(stable), kind))
+    print()
+
+    print("-- the homeostat's Hopf keeps euthymia but loses its damping --")
+    print("  bipolar (beta=8, ka=6): effective gain beta-ka = 2, so one euthymic")
+    print("  point -- but it has crossed its Hopf, so the field orbits it.")
     print()
 
     print("-- malfunction vs miscalibration: a reversible drive sweep --")
@@ -698,17 +754,18 @@ def cmd_demo(args):
         print("  beta=%.0f: hysteresis area = %.2f  (%s)" % (beta, a, tag))
     print()
 
-    print("-- approaching the fold: recovery slows without bound --")
+    print("-- approaching either edge, recovery slows (the early warning) --")
     for beta in (1.0, 3.0, 3.95):
         rt = _return_time(beta)
         print("  beta=%.2f: return time = %.1f" % (beta, rt))
+    print("  a fold slows monotonically; a Hopf rings as it slows (see: recover).")
     print()
 
-    print("-- the two malfunctions differ by which variable folds --")
+    print("-- the two malfunctions differ by which control fails --")
     bip = _spread("bipolar")
     scz = _spread("schizophrenia")
-    print("  bipolar (c=3):       cross-channel spread = %.3f  (one field, returns)" % bip)
-    print("  schizophrenia (c=0.2): cross-channel spread = %.3f  (fragments, stays)" % scz)
+    print("  bipolar (homeostat Hopf):    cross-channel spread = %.3f  (one field, returns)" % bip)
+    print("  schizophrenia (gain folds):  cross-channel spread = %.3f  (fragments, stays)" % scz)
     print()
 
     print("-- the miscalibrations never switch: a fixed two-armed profile --")
@@ -811,10 +868,11 @@ def cmd_guide(args):
     print("      two readings of one variable, not two faults.")
     print("  S   the logistic squash. Its slope at the center is 0.25, which is why")
     print("      beta=4 (where beta*0.25 = 1) is the tipping point.")
-    print("  a   'the bar': the level of relevance the regulator demands before it")
-    print("      admits a bid, a slow lagging average of g. It only bites when ka > 0,")
-    print("      and it is what turns a folded loop into an oscillator (bipolar) instead")
-    print("      of a stuck snap.")
+    print("  a   'the bar': the relevance level the homeostat demands before it admits")
+    print("      a bid, a slow lagging average of g. It only bites when ka > 0. The")
+    print("      homeostat opposes the self-reinforcement, so the effective gain is")
+    print("      beta-ka: it keeps a single euthymic resting state but can lose its")
+    print("      damping and orbit it (the Hopf behind bipolar).")
     print("  i   the channel index: 1 channel by default, 12 for `integration`.")
     print()
 
@@ -824,23 +882,21 @@ def cmd_guide(args):
     print()
     fmt = "  %-8s default %-5s %s"
     print(fmt % ("--beta", _num(d.beta),
-                 "STABILITY setting (loop gain). The master switch for the"))
-    print("                         kind of fault. beta<4: one resting state, the")
-    print("                         output slides. beta>4: the loop folds into two")
-    print("                         arms with an unstable threshold between; it snaps.")
+                 "SELF-REINFORCEMENT / loop gain, the fold engine. beta<4:"))
+    print("                         one resting state, the output slides. beta>4: with")
+    print("                         the homeostat off the loop folds into two basins.")
     print(fmt % ("--I", _num(d.I),
                  "external drive: stress, a salient input, a dopaminergic"))
     print("                         fluctuation. Shifts the contest one way or other.")
     print(fmt % ("--ka", _num(d.ka),
-                 "strength of the slow bar a (the relevance level demanded)."))
-    print("                         With a folded loop, ka>4 makes a relaxation")
-    print("                         oscillator (the bar drifts up under the flood until")
-    print("                         it tips, then back down): the bipolar mechanism.")
+                 "HOMEOSTAT strength (sets the bar a). It opposes the loop,"))
+    print("                         so effective gain = beta-ka keeps one euthymic point;")
+    print("                         past its HOPF that point orbits: the bipolar swing.")
     print(fmt % ("--c", _num(d.c),
-                 "INTEGRATION coupling across channels. High c keeps the"))
-    print("                         field one coherent thing (bipolar-type); low c")
-    print("                         lets channels fall into separate basins")
-    print("                         (fragmentation, schizophrenia-type).")
+                 "INTEGRATING gain / coupling across channels. High c keeps"))
+    print("                         the field one coherent thing (bipolar stays one field);")
+    print("                         low c lets the channels fall into separate basins")
+    print("                         (the integrating gain's FOLD: schizophrenia).")
     print(fmt % ("--k", _num(d.k),
                  "DISCOUNT steepness (the ADHD target). Used by `profile`."))
     print("                         Steep k makes the immediate reward outrank the")
@@ -903,13 +959,15 @@ def cmd_guide(args):
     print("  integration   12 channels: one coherent field, or fragmented basins")
     print("  profile       the miscalibrations: a fixed two-armed curve, never switches")
     print()
-    print("MALFUNCTION  = the loop loses stability (raise beta past 4); the output moves.")
-    print("MISCALIBRATION = the loop is fine (beta low) but a target (k or lam) is set")
-    print("               oddly; the output holds a fixed offset and never switches.")
+    print("MALFUNCTION  = a slow control loses stability. The integrating gain folds")
+    print("               (schizophrenia: fragments); the homeostat crosses a Hopf")
+    print("               (bipolar: orbits euthymia). Either way the output moves.")
+    print("MISCALIBRATION = both controls intact, a target (k or lam) set oddly; the")
+    print("               output holds a fixed two-armed offset and never switches.")
     print()
-    print("Critical slowing (recover) is a fold signature: it belongs to bipolar and to")
-    print("the onset of psychosis. The established schizophrenic state is fragmentation")
-    print("(integration, low c) -- chaos, not a fold -- so it does not slow.")
+    print("Both bifurcations slow near the edge (recover), but a fold slows monotonically")
+    print("and a Hopf rings, which says which tip is coming. The established, fragmented")
+    print("schizophrenic state is chaos rather than a fold, so it does not slow at all.")
     print()
     print("Output is ASCII sparklines and heatmaps by default, so it runs in a bare")
     print("terminal. Nothing to install: pure standard library, and --plot writes SVG.")

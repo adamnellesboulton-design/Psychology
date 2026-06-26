@@ -47,30 +47,32 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
 <body>
 <header>
   <h1>Allocator Toy Model</h1>
-  <p>One update rule, two kinds of fault. Move a knob and watch. Runs entirely in your browser.</p>
+  <p>The mind competes for one channel of attention, and a regulator decides what gets through.
+  Pick a condition or turn a dial, and see why mania swings, why psychosis fragments and sticks,
+  and why ADHD and autism hold one fixed shape. Runs entirely in your browser.</p>
 </header>
 <main>
   <section id="controls">
     <div class="group">
-      <label>View</label>
+      <label>Start with a condition</label>
+      <select id="preset">
+        <option value="custom">custom (your own settings)</option>
+        <option value="baseline">Healthy baseline</option>
+        <option value="schizophrenia">Schizophrenia (integration fails)</option>
+        <option value="bipolar">Bipolar (the level swings)</option>
+        <option value="adhd">ADHD (pulled to the now)</option>
+        <option value="autism">Autism (a gain that won't shift)</option>
+      </select>
+    </div>
+    <div class="group">
+      <label>What to look at</label>
       <div id="views" class="seg"></div>
       <p id="viewhint" class="hint"></p>
     </div>
     <div class="group">
-      <label for="preset">Preset</label>
-      <select id="preset">
-        <option value="custom">custom</option>
-        <option value="baseline">baseline</option>
-        <option value="schizophrenia">schizophrenia (malfunction, fragments)</option>
-        <option value="bipolar">bipolar (malfunction, oscillates)</option>
-        <option value="adhd">adhd (miscalibration, steep discount)</option>
-        <option value="autism">autism (miscalibration, stuck gain)</option>
-      </select>
-    </div>
-    <div class="group">
-      <label>Knobs</label>
+      <label>Or turn the dials yourself</label>
       <div id="sliders"></div>
-      <label class="check"><input type="checkbox" id="adapt" checked> engage slow adaptation (the bar, a)</label>
+      <label class="check"><input type="checkbox" id="adapt" checked> mood regulator on</label>
     </div>
   </section>
   <section id="out">
@@ -79,9 +81,9 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
   </section>
 </main>
 <footer>
-  <code>dg/dt = ( -g + S( beta*(g-0.5) + I - ka*(a-0.5) + c*(mean(g)-g) + noise ) ) / tau_g</code><br>
-  S is the logistic squash. beta=4 is the fold. Malfunction = raise beta past 4 (it moves);
-  miscalibration = set k or lam oddly with beta low (it holds a fixed offset).
+  A deliberately simple toy for the theory, not a fit to data. Under the hood it is one
+  equation run with different settings; for the dynamicists, the two malfunctions are a fold
+  (schizophrenia) and a Hopf bifurcation (bipolar).
 </footer>
 <script>
 "use strict";
@@ -155,9 +157,11 @@ function settle(p, driveValue, g0, T){
   return r.g[r.g.length-1][0];
 }
 
-function fixedPoints(beta){
-  var grid = linspace(1e-4, 1-1e-4, 4000), drive = 0.0;
-  function h(g){ return S(beta*(g-0.5)+drive) - g; }
+// Fixed points of the effective-gain map g = S(gain*(g-0.5)). The homeostat
+// opposes the self-reinforcement, so the effective gain is beta-ka.
+function fixedPoints(gain){
+  var grid = linspace(1e-4, 1-1e-4, 4000);
+  function h(g){ return S(gain*(g-0.5)) - g; }
   var hs = grid.map(h), roots = [];
   for(var i=0;i<grid.length-1;i++){
     if(hs[i] === 0 || hs[i]*hs[i+1] < 0){
@@ -167,8 +171,8 @@ function fixedPoints(beta){
         if(h(lo)*h(mid) <= 0) hi = mid; else lo = mid;
       }
       var g = 0.5*(lo+hi);
-      var sx = S(beta*(g-0.5)+drive);
-      roots.push([g, (-1 + beta*sx*(1-sx)) < 0]);
+      var sx = S(gain*(g-0.5));
+      roots.push([g, (-1 + gain*sx*(1-sx)) < 0]);
     }
   }
   var out = [];
@@ -296,27 +300,42 @@ function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
 // fragment) and skips the math (g, beta, hysteresis area, autocorrelation).
 
 function viewFp(p){
-  var fps = fixedPoints(p.beta);
-  var nStable = fps.filter(function(f){ return f[1]; }).length;
+  var ka = p.adapt ? p.ka : 0;
+  var ge = p.beta - ka;                              // effective gain
+  var fps = fixedPoints(ge);
+  var trace = (0.25*p.beta - 1)/p.tau_g - 1/p.tau_a; // 2D stability at euthymia
+  var hopf = (fps.length === 1 && trace > 0);
   var grid = linspace(0,1,400);
-  var curve = grid.map(function(g){ return S(p.beta*(g-0.5)); });
-  var svg = svgLines("Where the allocator can settle",
+  var curve = grid.map(function(g){ return S(ge*(g-0.5)); });
+  var svg = svgLines("Where the mind can settle",
     "its state:  collapsed  <-------->  flooded", "where it moves next",
     [{label:"next state", xs:grid, ys:curve}, {label:"stays put", xs:grid, ys:grid}],
-    {points: fps.map(function(f){ return [f[0], f[0], f[1]]; })});
-  var body = (nStable >= 2)
-    ? "The dial has folded into two resting places (the green dots): one "
-      + "flooded, where everything feels urgent and over-connected, and one "
-      + "collapsed, where nothing lands and the world goes flat. Between them "
-      + "is only an unstable tipping point (red), so there is no calm middle to "
-      + "rest in -- the allocator falls into one extreme or the other and stays.\n\n"
-      + "You got here by turning self-reinforcement up past the fold. Turn it "
-      + "back down and the two resting places merge into one."
-    : "There is a single resting place, right in the middle (the green dot). "
-      + "Nudge the allocator and it drifts back to it. It can lean a bit flooded "
-      + "or a bit collapsed, but it slides there smoothly -- there is no hard "
-      + "line to fall over, and no extreme to get stuck in.";
-  return {svgs:[svg], title:"Where the allocator settles", body:body};
+    {points: fps.map(function(f){ return [f[0], f[0], f[1] && !hopf]; })});
+  var body;
+  if(fps.length >= 2)
+    body = "Think of the curve as a landscape and the dots as the places the mind "
+      + "can come to rest. Right now there are two resting places and no steady "
+      + "middle: one where everything floods with meaning (the over-connected, "
+      + "urgent world of psychosis) and one where meaning drains away (flat, "
+      + "withdrawn) -- with only an unstable knife-edge between them (the red dot). "
+      + "Knocked off the edge, the mind drops into one trap and stays. This is the "
+      + "broken-integration picture of schizophrenia.";
+  else if(hopf)
+    body = "Think of this as the landscape of states the mind can rest in. Here "
+      + "there is just one resting place -- a normal, balanced middle -- because "
+      + "the regulator holds the mind to a single centre instead of letting it "
+      + "split in two. But that centre has gone unstable: rather than resting "
+      + "there, the system circles it, swinging out toward 'too much' and 'too "
+      + "little' and back through the middle. That is the bipolar pattern -- a "
+      + "regulator that has started to oscillate -- and there is still a real "
+      + "middle (euthymia) to return to between swings.";
+  else
+    body = "Think of this as the landscape of states the mind can rest in. There "
+      + "is a single, steady resting place in the middle: nudge the system and it "
+      + "settles back. It can lean a little toward 'too much' or 'too little', but "
+      + "it slides there gently -- no trap to fall into, no swing to get caught in. "
+      + "A regulator doing its job.";
+  return {svgs:[svg], title:"Where the mind settles", body:body};
 }
 
 function viewSweep(p){
@@ -326,54 +345,63 @@ function viewSweep(p){
   ups.forEach(function(d){ g = settle(p, d, g); gUp.push(g); });
   downs.forEach(function(d){ g = settle(p, d, g); gDown.push(g); });
   var folded = loopArea(ups.concat(downs), gUp.concat(gDown)) > 0.3;
-  var svg = svgLines("Push the drive up, then back down",
+  var svg = svgLines("Turn the pressure up, then back down",
     "drive (stress / strong input):  low  <-------->  high",
     "its state: collapsed -> flooded",
     [{label:"pushing up", xs:ups, ys:gUp}, {label:"easing back", xs:downs, ys:gDown}]);
   var body = folded
-    ? "We slowly raise the drive (a stressor, a strong input) and then ease it "
-      + "back down. The two paths do not match: once it flips up into the "
-      + "flooded state it stays there even as you ease off, and you have to "
-      + "push well back the other way before it drops. That stickiness -- a "
-      + "memory of where it has been -- is the fingerprint of a malfunction, "
-      + "and it is why removing a trigger does not simply undo an episode."
-    : "We slowly raise the drive (a stressor, a strong input) and then ease it "
-      + "back down. The two paths lie right on top of each other: wherever the "
-      + "drive is, the allocator goes to the same place, no matter which way it "
-      + "came. It just slides -- no tipping point, no memory. That smooth, "
-      + "history-free response is what a miscalibration looks like.";
-  return {svgs:[svg], title:"Does it remember where it has been?", body:body};
+    ? "We slowly turn up an outside pressure -- a stressor, a strong input -- and "
+      + "then take it away again, tracing the state up and back down. The two paths "
+      + "do not match. Once the pressure tips the mind into the flooded state, it "
+      + "stays there even after you remove the pressure entirely; to get back you "
+      + "have to push hard the other way. This is why removing whatever triggered "
+      + "an episode does not end the episode -- the state has its own grip now, "
+      + "independent of the trigger. (Dynamicists call the gap 'hysteresis'.)"
+    : "We slowly turn up an outside pressure and then take it away, tracing the "
+      + "state up and back down. The two paths lie right on top of each other: the "
+      + "state simply follows the pressure and returns the moment it is gone, with "
+      + "no memory of where it has been. Nothing latches. This is what a steady "
+      + "mind does -- and what a fixed trait (ADHD, autism) does too: it tracks the "
+      + "situation and never sticks.";
+  return {svgs:[svg], title:"Why a trigger sticks", body:body};
 }
 
 function viewRecover(p){
   var betas=[1.0,2.0,3.0,3.5,3.8,3.9,3.95], nudge=0.1, tol=0.05*nudge, Tmax=600.0;
-  var rts=[], ars=[];
+  var rts=[];
   betas.forEach(function(beta){
     var q = Object.assign(defaults(), {beta:beta, tau_g:p.tau_g, dt:p.dt, noise:0});
     var r = simulate(q, Tmax, 1, null, 0.5+nudge, 0.5, null);
     var rt = Tmax;
     for(var s=0;s<r.g.length;s++){ if(Math.abs(r.g[s][0]-0.5) < tol){ rt = s*q.dt; break; } }
     rts.push(rt);
-    var qn = Object.assign(defaults(), {beta:beta, tau_g:p.tau_g, dt:p.dt, noise:0.01, seed:1});
-    var rn = simulate(qn, 400.0, 1, null, 0.5, 0.5, gaussFactory(1));
-    var x = [];
-    for(var s=1000;s<rn.g.length;s++) x.push(rn.g[s][0]-0.5);
-    ars.push(pearson(x.slice(0,-1), x.slice(1)));
   });
-  var svg1 = svgLines("How long it takes to recover from a nudge",
-    "stability:  steady  ----------->  near the tipping point", "recovery time",
+  // The discriminator: the SHAPE of recovery near the edge. A fold (no homeostat)
+  // crawls back without overshoot; a Hopf (homeostat engaged) rings.
+  var Tshape = 200.0;
+  var fold = Object.assign(defaults(), {beta:3.97, ka:0, tau_g:p.tau_g, tau_a:p.tau_a, dt:p.dt, noise:0});
+  var hopf = Object.assign(defaults(), {beta:3.97, ka:3.97, tau_g:p.tau_g, tau_a:p.tau_a, dt:p.dt, noise:0});
+  var rf = simulate(fold, Tshape, 1, null, 0.5+nudge, 0.5, null);
+  var rh = simulate(hopf, Tshape, 1, null, 0.5+nudge, 0.5, null);
+  var tt = downsample(rf.t, 1200);
+  var foldDev = downsample(col(rf.g,0).map(function(v){return v-0.5;}), 1200);
+  var hopfDev = downsample(col(rh.g,0).map(function(v){return v-0.5;}), 1200);
+  var svg1 = svgLines("Recovery gets slower as a breakdown nears",
+    "closer to a breakdown  ->", "time to recover from a nudge",
     [{label:"recovery time", xs:betas, ys:rts}], {markers:true});
-  var svg2 = svgLines("How much it lingers and wobbles",
-    "stability:  steady  ----------->  near the tipping point", "persistence",
-    [{label:"persistence", xs:betas, ys:ars}], {markers:true});
-  var body = "We give the allocator a small nudge and time how long it takes to "
-    + "settle back, moving it closer and closer to its tipping point (left to "
-    + "right). The nearer it gets, the slower it recovers and the more it "
-    + "lingers and wobbles -- long before it ever actually flips. That creeping "
-    + "sluggishness is an early-warning sign you can measure without waiting for "
-    + "a switch. It is the kind of signal that builds before a malfunction -- a "
-    + "mood episode, the run-up to psychosis -- and not before a fixed quirk.";
-  return {svgs:[svg1, svg2], title:"Early warning before it tips", body:body};
+  var svg2 = svgLines("The shape of recovery says which breakdown",
+    "time after a nudge", "how far from normal",
+    [{label:"toward psychosis: a straight crawl", xs:tt, ys:foldDev},
+     {label:"toward a mood episode: a growing wobble", xs:tt, ys:hopfDev}]);
+  var body = "Give the mind a small nudge and watch how it recovers, as we move it "
+    + "closer to a breakdown (left to right, top chart). The closer it gets, the "
+    + "longer recovery takes -- so a system heading for a tip turns sluggish weeks "
+    + "before anything visibly changes. That sluggishness is a measurable warning "
+    + "sign. And the shape of the recovery (bottom chart) tells you which kind of "
+    + "breakdown is coming: the slide toward psychosis creeps back in a straight "
+    + "line, while the run-up to a mood episode wobbles, the wobble growing into "
+    + "the very swing that is about to take over.";
+  return {svgs:[svg1, svg2], title:"Early warning, before it tips", body:body};
 }
 
 function viewSeries(p){
@@ -384,22 +412,30 @@ function viewSeries(p){
   var t = downsample(r.t, 2000), gp = downsample(meanG, 2000);
   var series = [{label:"gain", xs:t, ys:gp}];
   if(p.ka>0) series.push({label:"the bar (slow)", xs:t, ys:downsample(r.a, 2000)});
-  var svg = svgLines("The allocator over time", "time",
+  var svg = svgLines("The state over time", "time",
     "gain:  collapsed -> flooded", series);
+  var ge = p.beta - (p.adapt ? p.ka : 0);
+  var trace = (0.25*p.beta - 1)/p.tau_g - 1/p.tau_a;
   var body;
-  if(p.ka>=4 && p.beta>4 && p.adapt)
-    body = "Watch it swing on a slow rhythm: the gain builds until everything "
-      + "floods (think mania), tips over and drains until nothing lands (think "
-      + "depression), then climbs back, over and over. It keeps returning to "
-      + "the swing rather than resting -- the model's picture of bipolar.";
-  else if(p.beta>4)
-    body = "It drops into one extreme and stays there -- flooded or collapsed, "
-      + "with no rhythm and no return on its own. (Give it the slow bar, by "
-      + "raising ka, to turn the snap into a swing.)";
+  if(p.adapt && p.ka>0 && ge<4 && trace>0)
+    body = "This is the overall state, moment to moment. With the mood regulator "
+      + "destabilised it cannot hold a steady level: the system builds up until "
+      + "everything floods with significance -- racing, expansive, mania -- then "
+      + "overshoots and drains until nothing feels worth anything -- the flatness "
+      + "of depression -- before climbing back through the middle and round again. "
+      + "The swing is the illness, but there is still a normal middle it passes "
+      + "through between episodes. The orange line is the slow regulator, always a "
+      + "step behind.";
+  else if(p.beta>4 && ge>=4)
+    body = "This is the overall state over time. Here it does not swing -- it drops "
+      + "into one extreme and stays. The thing that normally holds the mind "
+      + "together has given way, so there is no steady middle to come back to. "
+      + "(Turn the mood regulator up to see a swing instead of a stuck collapse.)";
   else
-    body = "It just hovers near the middle, wobbling a little with the noise. "
-      + "Nothing builds and nothing tips -- a calm, stable allocator.";
-  return {svgs:[svg], title:"The allocator over time", body:body};
+    body = "This is the overall state over time. It sits near a steady middle, "
+      + "wobbling a little with random noise -- nothing builds, nothing tips. A "
+      + "regulator doing its job.";
+  return {svgs:[svg], title:"The state over time", body:body};
 }
 
 function viewIntegration(p){
@@ -411,33 +447,39 @@ function viewIntegration(p){
   var coherent = mean(spreads) < 0.1;
   var wide = downsample(r.g, 240), mat = [];
   for(var ch=0;ch<n;ch++){ mat.push(wide.map(function(row){ return row[ch]; })); }
-  var svg = svgHeatmap("Twelve channels over time (bright = flooded, dark = collapsed)", mat);
+  var svg = svgHeatmap("Twelve streams of experience over time (bright = flooded, dark = flat)", mat);
   var body = coherent
-    ? "Twelve channels -- think of them as different streams of perception and "
-      + "thought. Here they all move together as one field: a single mood laid "
-      + "over everything, swinging and returning as a whole. Unstable, but still "
-      + "one integrated mind. That is the bipolar-type picture."
-    : "Twelve channels -- different streams of perception and thought. Here they "
-      + "scatter into different states and stay scattered: no shared field, no "
-      + "single mood, no coming back together. The binding that ties a mind into "
-      + "one thing has come apart -- the schizophrenia-type picture.";
+    ? "Each row is a different stream of experience -- a sense, a train of "
+      + "thought. Here they all move together as one: a single mood or tone laid "
+      + "over everything, swinging and returning as a whole. Even as it swings, "
+      + "the mind stays one integrated thing. That is the bipolar picture -- the "
+      + "level is unstable, but the mind is still whole."
+    : "Each row is a different stream of experience -- a sense, a train of "
+      + "thought. Here they come apart, each settling into its own state and "
+      + "staying there, with nothing tying them into a single whole. No shared "
+      + "mood, no one coherent mind -- the binding itself has failed. That is the "
+      + "fragmentation of psychosis, and unlike a mood swing it does not knit back "
+      + "together on its own.";
   return {svgs:[svg], title:"One mind, or many?", body:body};
 }
 
 function viewProfileAdhd(p){
   var delay = linspace(0,10,41);
   var weight = delay.map(function(d){ return settle(p, 4.0*(1.0/(1.0+p.k*d) - 0.5), 0.5); });
-  var svg = svgLines("Attention vs. how soon a reward arrives",
-    "how soon it pays off:  now  -------->  later", "attention it gets",
-    [{label:"attention", xs:delay, ys:weight}]);
-  var body = "This is how much attention each option gets, by how soon it pays "
-    + "off. With steep discounting, whatever pays now is piled with weight while "
-    + "anything that pays later is starved -- both at once, and steadily. That is "
-    + "the two sides of one setting: caught by the immediate (distractible, "
-    + "impulsive, or locked onto something engaging) and unable to get going on "
-    + "the important-but-distant. It never swings; it just holds this shape. "
-    + "Steepen the discount and the curve drops away sooner.";
-  return {svgs:[svg], title:"Attention vs. how soon a reward arrives", body:body};
+  var svg = svgLines("How much pull, by how soon it pays off",
+    "how soon it pays off:  now  -------->  later", "pull it has on attention",
+    [{label:"pull", xs:delay, ys:weight}]);
+  var body = "This is how much pull each option has, depending on how soon it pays "
+    + "off. When the future is discounted steeply, whatever pays off right now "
+    + "grabs nearly all the weight, while anything whose payoff is far away gets "
+    + "almost none -- both at the same time, all the time. That one setting "
+    + "explains the puzzle of ADHD: the very same person is grabbed by what is "
+    + "immediate (distractible, impulsive, or locked onto something engaging) and "
+    + "cannot get started on what matters later (the dull but important task feels "
+    + "impossible). It is not two problems, and it does not come and go -- it is "
+    + "one fixed shape. Make the discounting steeper and the curve drops off "
+    + "sooner.";
+  return {svgs:[svg], title:"ADHD: pulled to the now", body:body};
 }
 
 function viewProfileAutism(p){
@@ -447,21 +489,25 @@ function viewProfileAutism(p){
   var realized = driveOpt.map(function(d){ return settle(p, p.lam*d, 0.5); });
   var mismatch = vol.map(function(v,i){ return realized[i]-gOpt[i]; });
   var stuck = (Math.max.apply(null,mismatch) - Math.min.apply(null,mismatch)) > 0.1;
-  var svg = svgLines("Does the gain fit the moment?",
-    "the world:  steady  -------->  fast-changing", "gain:  too low  <->  too high",
+  var svg = svgLines("Does the response fit the moment?",
+    "the world:  steady  -------->  fast-changing", "response:  too weak  <->  too strong",
     [{label:"mismatch", xs:vol, ys:mismatch}]);
   var body = stuck
-    ? "This is whether the gain matches what each situation needs. A stuck "
-      + "setting cannot adjust: it runs too high when the world is changing fast "
-      + "(overwhelm -- too much gets through) and too low when the world is "
-      + "steady (missing things others would catch) -- both at once. It does not "
-      + "swing between them; it holds the mismatch as a fixed profile, sliding "
-      + "smoothly as the world changes but never flipping."
-    : "This is whether the gain matches what each situation needs. With a "
-      + "flexible setting it tracks the world almost perfectly -- tightening when "
-      + "things are steady, loosening when they change -- so the mismatch stays "
-      + "near zero everywhere. Lower the flexibility to see the stuck profile.";
-  return {svgs:[svg], title:"Does the gain fit the moment?", body:body};
+    ? "This is whether the strength of response matches what each situation needs. "
+      + "Normally it adjusts -- turning up when the world is steady and "
+      + "predictable, easing off when it is changing fast. When that adjustment is "
+      + "stuck, the same fixed setting is too strong in fast-changing situations "
+      + "(overwhelm -- the painful loudness of a busy room, too much getting "
+      + "through) and too weak in steady ones (missing things others would catch). "
+      + "Both at once, as a fixed profile, not a swing. It is one dial set once and "
+      + "held, which is why the over- and under-reacting sit side by side in the "
+      + "same person. Raise the flexibility and the mismatch melts away."
+    : "This is whether the strength of response matches what each situation needs. "
+      + "With a flexible setting it tracks the world almost perfectly -- turning up "
+      + "when things are steady, easing off when they change -- so the mismatch "
+      + "stays near zero everywhere. Lower the flexibility to see the stuck "
+      + "profile that the autism setting holds.";
+  return {svgs:[svg], title:"Autism: a response that won't shift", body:body};
 }
 
 var RUNNERS = {
@@ -474,7 +520,7 @@ var RUNNERS = {
 // bipolar preset still shows a clean hysteresis loop rather than dragging the
 // oscillator's ka along. The UI dims the knobs a view ignores using this map.
 var VIEW_USES = {
-  fp: ["beta"], sweep: ["beta"], recover: [],
+  fp: ["beta", "ka"], sweep: ["beta"], recover: [],
   series: ["beta", "I", "ka", "c", "noise"],
   integration: ["beta", "c", "noise"],
   profile_adhd: ["k"], profile_autism: ["lam"]
@@ -493,13 +539,13 @@ function runView(view, state){
 // ---- UI --------------------------------------------------------------------
 
 var KNOBS = [
-  {key:"beta", name:"beta - stability (fold at 4)", min:0, max:10, step:0.05},
-  {key:"I", name:"I - external drive", min:-4, max:4, step:0.05},
-  {key:"ka", name:"ka - slow bar strength", min:0, max:8, step:0.1},
-  {key:"c", name:"c - integration coupling", min:0, max:4, step:0.05},
-  {key:"k", name:"k - discount steepness (ADHD)", min:0.05, max:1.5, step:0.01},
-  {key:"lam", name:"lam - flexibility (autism)", min:0, max:1, step:0.01},
-  {key:"noise", name:"noise", min:0, max:0.2, step:0.005}
+  {key:"beta", name:"Self-reinforcement (winning breeds winning)", min:0, max:10, step:0.05},
+  {key:"I", name:"Outside pressure (stress, a strong input)", min:-4, max:4, step:0.05},
+  {key:"ka", name:"Mood-regulator strength", min:0, max:8, step:0.1},
+  {key:"c", name:"How tightly the mind coheres as one", min:0, max:4, step:0.05},
+  {key:"k", name:"How steeply the future is discounted (ADHD)", min:0.05, max:1.5, step:0.01},
+  {key:"lam", name:"How flexibly attention adapts (autism)", min:0, max:1, step:0.01},
+  {key:"noise", name:"Random fluctuation", min:0, max:0.2, step:0.005}
 ];
 var DEF = {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, noise:0, adapt:1};
 var PRESETS = {
@@ -507,13 +553,13 @@ var PRESETS = {
   bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, k:0.95}, autism:{beta:2, lam:0.1}
 };
 var VIEWS = [
-  {key:"series", label:"series", hint:"Time series of the field. Try the bipolar preset for the oscillation."},
-  {key:"fp", label:"fixed points", hint:"Resting states. Two arms appear once beta passes 4."},
-  {key:"sweep", label:"sweep", hint:"Reversible drive sweep. A folded loop takes a different path up than down."},
-  {key:"recover", label:"recover", hint:"Sweeps beta itself: recovery time, variance, and autocorrelation blow up nearing the fold."},
-  {key:"integration", label:"integration", hint:"12 channels. High c stays one field; low c fragments."},
-  {key:"profile_adhd", label:"ADHD profile", hint:"Weight vs reward delay: a fixed two-armed curve."},
-  {key:"profile_autism", label:"autism profile", hint:"Gain mismatch vs volatility: a fixed two-armed curve."}
+  {key:"series", label:"Over time", hint:"Watch the state move: a mood swing, a collapse that sticks, or steady."},
+  {key:"fp", label:"Where it settles", hint:"The resting states: one steady place, two traps, or a swing around the middle."},
+  {key:"sweep", label:"Why triggers stick", hint:"Why removing a stressor doesn't undo an episode."},
+  {key:"recover", label:"Early warning", hint:"How a breakdown announces itself before it happens."},
+  {key:"integration", label:"One mind or many", hint:"Whether the mind stays one coherent field or fragments."},
+  {key:"profile_adhd", label:"ADHD: now vs later", hint:"Why the same person hyperfocuses yet can't start a dull task."},
+  {key:"profile_autism", label:"Autism: steady vs changing", hint:"Why the same person is overwhelmed in some settings and under-reacts in others."}
 ];
 
 var state = Object.assign({}, DEF);
