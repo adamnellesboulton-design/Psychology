@@ -45,6 +45,15 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 .card-body{font-size:13.5px;line-height:1.55;color:#33333b;white-space:pre-wrap;margin-top:6px;}
 #advanced summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);outline:none;}
 #advanced[open] summary{margin-bottom:12px;}
+#mathBtn{margin-top:6px;width:100%;font:inherit;font-size:12px;padding:8px 10px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink);}
+#mathBtn:hover{border-color:var(--accent);color:var(--accent);}
+.modal{position:fixed;inset:0;background:rgba(20,20,28,.55);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50;}
+.modal[hidden]{display:none;}
+.modal-box{background:#fff;border-radius:14px;max-width:780px;width:100%;max-height:88vh;overflow:auto;padding:22px 26px;position:relative;}
+.modal-box h2{margin:0 0 4px;font-size:18px;}
+.modal-box .sub{color:var(--muted);font-size:13px;margin:0 0 14px;}
+.modal-close{position:absolute;top:14px;right:16px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 11px;cursor:pointer;font:inherit;font-size:12px;}
+#mathText{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;white-space:pre;overflow-x:auto;color:#1b1b1f;margin:0;}
 footer{padding:6px 24px 26px;color:var(--muted);font-size:12px;}
 footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
 </style>
@@ -67,11 +76,62 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
       <div id="sliders"></div>
       <label class="check"><input type="checkbox" id="adapt" checked> mood regulator on</label>
     </details>
+    <button id="mathBtn" type="button">Show the math</button>
   </section>
   <section id="out">
     <div id="dashboard"></div>
   </section>
 </main>
+<div id="mathModal" class="modal" hidden>
+  <div class="modal-box">
+    <button id="mathClose" class="modal-close" type="button">close</button>
+    <h2>The math behind the model</h2>
+    <p class="sub">One equation, run with different settings. Illustrative, not fitted to data.</p>
+    <pre id="mathText">
+STATE
+  g_i in (0,1): the allocator's gain on relevance, one per channel i.
+  g near 1 = flooding;  g near 0 = collapse;  g = 1/2 = euthymia.
+  a in (0,1): the bar, the relevance level a bid must clear (slow homeostat).
+
+UPDATE RULE   (continuous time; S is the logistic squash, S(x) = 1/(1+e^-x))
+
+  tau_g dg_i/dt = -g_i + S( beta (g_i - 1/2)        self-reinforcement (loop gain)
+                           + I                       external drive
+                           - ka (a - 1/2)            homeostat / the bar
+                           + c ( mean(g) - g_i )     integrating gain (coupling)
+                           + sigma xi_i )            noise,  xi_i ~ N(0,1)
+
+  tau_a da/dt   = mean(g) - a                        slow homeostat
+
+  Defaults: tau_g = 1, tau_a = 40, dt = 0.05 (Euler).  Noise is drawn fresh
+  per step and per channel; sigma is the amplitude knob.
+
+PARAMETERS (each a named setting in the theory)
+  beta   self-reinforcement / loop gain        c      integrating gain
+  I      external drive                        k      discount steepness (ADHD)
+  ka     homeostat strength (sets the bar)     lam    flexibility (autism)
+
+RESTING STATES AND BIFURCATIONS   (single channel; at rest a = g)
+  effective gain  G = beta - ka     (the homeostat opposes the loop)
+  fixed points solve   g = S( G (g - 1/2) )
+    G < 4 : one resting state, euthymia at g = 1/2
+    G > 4 : two stable arms + an unstable threshold  ->  FOLD  (schizophrenia)
+  Because S'(0) = 1/4, the split is exactly at G = 4.
+  Stability of euthymia from the 2x2 Jacobian trace:
+    trace = (beta/4 - 1)/tau_g - 1/tau_a
+    trace < 0            : euthymia is damped (it rests there)
+    trace > 0 with G < 4 : euthymia is orbited  ->  HOPF  (bipolar)
+  Critical slowing: near the fold, recovery slows monotonically; near the Hopf
+  it slows while ringing, the wobble growing as the damping dies.
+
+MISCALIBRATION PROFILES   (stable loop, beta low; the fault is a fixed setting)
+  ADHD:   discounted value v(d) = 1/(1 + k d) for delay d; weight = the resting
+          g under a drive set by v(d). Steep k starves the distant option.
+  autism: optimal gain g*(v) tracks volatility v; the realized gain tracks it
+          only by a fraction lam. Mismatch = realized - g*; lam = 1 cancels it.
+</pre>
+  </div>
+</div>
 <footer>
   A deliberately simple toy for the theory, not a fit to data. Under the hood it is one
   equation run with different settings; for the dynamicists, the two malfunctions are a fold
@@ -142,11 +202,20 @@ function simulate(p, T, n, driveFn, g0, a0, gauss){
   return {t:t, g:outG, a:outA};
 }
 
+// Single-channel run to steady state, returning only the final g. Tight and
+// allocation-free (no trajectory stored), since settle is called hundreds of
+// times by the sweep and the profiles. For one channel the coupling term
+// c*(mean(g)-g) is zero, so it drops out exactly.
 function settle(p, driveValue, g0, T){
   T = (T == null) ? 80.0 : T;
-  var q = Object.assign(defaults(), {beta:p.beta, I:driveValue, ka:p.ka, c:p.c, adapt:p.adapt, noise:0, tau_g:p.tau_g, tau_a:p.tau_a, dt:p.dt});
-  var r = simulate(q, T, 1, null, g0, 0.5, null);
-  return r.g[r.g.length-1][0];
+  var steps = Math.round(T/p.dt), g = g0, a = 0.5;
+  for(var s=0;s<steps;s++){
+    var mg = g;
+    var x = p.beta*(g-0.5) + driveValue - p.ka*(a-0.5);
+    g = g + p.dt*(-g + S(x))/p.tau_g;
+    if(p.adapt) a = a + p.dt*(mg - a)/p.tau_a;
+  }
+  return g;
 }
 
 // Fixed points of the effective-gain map g = S(gain*(g-0.5)). The homeostat
@@ -276,8 +345,8 @@ function svgHeatmap(title, matrix){
       o.push('<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+(cw+0.6).toFixed(2)+'" height="'+(chh+0.6).toFixed(2)+'" fill="'+heatRgb(matrix[r][c])+'"/>');
     }
   }
-  o.push('<text x="'+(ml+pw/2)+'" y="'+(H-14)+'" text-anchor="middle">time</text>');
-  o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">channel</text>');
+  o.push('<text x="'+(ml+pw/2)+'" y="'+(H-14)+'" text-anchor="middle">time  t</text>');
+  o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">channel  i</text>');
   o.push("</svg>");
   return o.join("\n");
 }
@@ -300,7 +369,7 @@ function viewFp(p){
   var grid = linspace(0,1,400);
   var curve = grid.map(function(g){ return S(ge*(g-0.5)); });
   var svg = svgLines("Where the mind can settle",
-    "its state:  collapsed  <-------->  flooded", "where it moves next",
+    "g  -  allocator state (0 collapsed, 1 flooded)", "next-step g",
     [{label:"next state", xs:grid, ys:curve}, {label:"stays put", xs:grid, ys:grid}],
     {points: fps.map(function(f){ return [f[0], f[0], f[1] && !hopf]; })});
   var body;
@@ -338,8 +407,8 @@ function viewSweep(p){
   downs.forEach(function(d){ g = settle(p, d, g); gDown.push(g); });
   var folded = loopArea(ups.concat(downs), gUp.concat(gDown)) > 0.3;
   var svg = svgLines("Turn the pressure up, then back down",
-    "drive (stress / strong input):  low  <-------->  high",
-    "its state: collapsed -> flooded",
+    "external drive  I  (stress / input)",
+    "steady-state g  (0 - 1)",
     [{label:"pushing up", xs:ups, ys:gUp}, {label:"easing back", xs:downs, ys:gDown}]);
   var body = folded
     ? "We slowly turn up an outside pressure -- a stressor, a strong input -- and "
@@ -358,15 +427,20 @@ function viewSweep(p){
   return {svgs:[svg], title:"Why a trigger sticks", body:body};
 }
 
+// Recover ignores the knobs (it sweeps beta itself), so its output is constant
+// and we compute it once. The return-time runs stop the moment they recover.
+var recoverCache = null;
 function viewRecover(p){
-  var betas=[1.0,2.0,3.0,3.5,3.8,3.9,3.95], nudge=0.1, tol=0.05*nudge, Tmax=600.0;
-  var rts=[];
-  betas.forEach(function(beta){
-    var q = Object.assign(defaults(), {beta:beta, tau_g:p.tau_g, dt:p.dt, noise:0});
-    var r = simulate(q, Tmax, 1, null, 0.5+nudge, 0.5, null);
-    var rt = Tmax;
-    for(var s=0;s<r.g.length;s++){ if(Math.abs(r.g[s][0]-0.5) < tol){ rt = s*q.dt; break; } }
-    rts.push(rt);
+  if(recoverCache) return recoverCache;
+  var betas=[1.0,2.0,3.0,3.5,3.8,3.9,3.95], nudge=0.1, tol=0.05*nudge;
+  var Tmax=600.0, tau_g=p.tau_g, dt=p.dt, maxSteps=Math.round(Tmax/dt);
+  var rts = betas.map(function(beta){
+    var g = 0.5+nudge, rt = Tmax;
+    for(var s=0;s<maxSteps;s++){
+      g = g + dt*(-g + S(beta*(g-0.5)))/tau_g;      // ka=0: pure fold recovery
+      if(Math.abs(g-0.5) < tol){ rt = s*dt; break; }
+    }
+    return rt;
   });
   // The discriminator: the SHAPE of recovery near the edge. A fold (no homeostat)
   // crawls back without overshoot; a Hopf (homeostat engaged) rings.
@@ -379,10 +453,10 @@ function viewRecover(p){
   var foldDev = downsample(col(rf.g,0).map(function(v){return v-0.5;}), 1200);
   var hopfDev = downsample(col(rh.g,0).map(function(v){return v-0.5;}), 1200);
   var svg1 = svgLines("Recovery gets slower as a breakdown nears",
-    "closer to a breakdown  ->", "time to recover from a nudge",
+    "loop gain  beta  (fold at 4)", "recovery time",
     [{label:"recovery time", xs:betas, ys:rts}], {markers:true});
   var svg2 = svgLines("The shape of recovery says which breakdown",
-    "time after a nudge", "how far from normal",
+    "time after nudge  t", "deviation  g - 1/2",
     [{label:"toward psychosis: a straight crawl", xs:tt, ys:foldDev},
      {label:"toward a mood episode: a growing wobble", xs:tt, ys:hopfDev}]);
   var body = "Give the mind a small nudge and watch how it recovers, as we move it "
@@ -393,7 +467,8 @@ function viewRecover(p){
     + "breakdown is coming: the slide toward psychosis creeps back in a straight "
     + "line, while the run-up to a mood episode wobbles, the wobble growing into "
     + "the very swing that is about to take over.";
-  return {svgs:[svg1, svg2], title:"Early warning, before it tips", body:body};
+  recoverCache = {svgs:[svg1, svg2], title:"Early warning, before it tips", body:body};
+  return recoverCache;
 }
 
 function viewSeries(p){
@@ -402,10 +477,10 @@ function viewSeries(p){
   var r = simulate(p, T, 1, null, 0.5, 0.5, gaussFactory(p.seed));
   var meanG = col(r.g, 0);
   var t = downsample(r.t, 2000), gp = downsample(meanG, 2000);
-  var series = [{label:"gain", xs:t, ys:gp}];
-  if(p.ka>0) series.push({label:"the bar (slow)", xs:t, ys:downsample(r.a, 2000)});
-  var svg = svgLines("The state over time", "time",
-    "gain:  collapsed -> flooded", series);
+  var series = [{label:"g (gain)", xs:t, ys:gp}];
+  if(p.ka>0) series.push({label:"a (the bar)", xs:t, ys:downsample(r.a, 2000)});
+  var svg = svgLines("The state over time", "time  t",
+    "g  (0 collapsed, 1 flooded)", series);
   var ge = p.beta - (p.adapt ? p.ka : 0);
   var trace = (0.25*p.beta - 1)/p.tau_g - 1/p.tau_a;
   var body;
@@ -459,7 +534,7 @@ function viewProfileAdhd(p){
   var delay = linspace(0,10,41);
   var weight = delay.map(function(d){ return settle(p, 4.0*(1.0/(1.0+p.k*d) - 0.5), 0.5); });
   var svg = svgLines("How much pull, by how soon it pays off",
-    "how soon it pays off:  now  -------->  later", "pull it has on attention",
+    "reward delay  d", "weight  g*(d)",
     [{label:"pull", xs:delay, ys:weight}]);
   var body = "This is how much pull each option has, depending on how soon it pays "
     + "off. When the future is discounted steeply, whatever pays off right now "
@@ -482,7 +557,7 @@ function viewProfileAutism(p){
   var mismatch = vol.map(function(v,i){ return realized[i]-gOpt[i]; });
   var stuck = (Math.max.apply(null,mismatch) - Math.min.apply(null,mismatch)) > 0.1;
   var svg = svgLines("Does the response fit the moment?",
-    "the world:  steady  -------->  fast-changing", "response:  too weak  <->  too strong",
+    "volatility  v  (0 steady, 1 changing)", "gain mismatch  g - g*",
     [{label:"mismatch", xs:vol, ys:mismatch}]);
   var body = stuck
     ? "This is whether the strength of response matches what each situation needs. "
@@ -637,27 +712,36 @@ function applyPreset(name){
 var dashTimer = null;
 function scheduleDash(){ if(dashTimer) clearTimeout(dashTimer); dashTimer = setTimeout(renderDashboard, 160); }
 
-function renderDashboard(){
-  var dash = el("dashboard");
-  dash.innerHTML = "";
-  var intro = document.createElement("div");
-  intro.className = "dash-intro";
-  intro.innerHTML = CONDITION_INTROS[cond] || CONDITION_INTROS.custom;
-  dash.appendChild(intro);
+// The five conditions are fixed, so their dashboards are computed once and
+// cached; re-selecting one is then instant. Custom (dial edits) is never cached.
+var dashCache = {};
+function buildDashHTML(){
+  var html = '<div class="dash-intro">' + (CONDITION_INTROS[cond] || CONDITION_INTROS.custom) + '</div>';
   var views = CONDITION_VIEWS[cond] || CONDITION_VIEWS.custom;
   views.forEach(function(vk){
     var out;
     try { out = runView(vk, state); } catch(e){ return; }
-    var card = document.createElement("div"); card.className = "card";
-    var t = document.createElement("div"); t.className = "card-title"; t.textContent = out.title || "";
-    var plots = document.createElement("div"); plots.innerHTML = out.svgs.join("");
-    var body = document.createElement("div"); body.className = "card-body"; body.textContent = out.body || "";
-    card.appendChild(t); card.appendChild(plots); card.appendChild(body);
-    dash.appendChild(card);
+    html += '<div class="card"><div class="card-title">' + escapeHtml(out.title || "") + '</div>'
+          + '<div>' + out.svgs.join("") + '</div>'
+          + '<div class="card-body">' + escapeHtml(out.body || "") + '</div></div>';
   });
+  return html;
+}
+function escapeHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function renderDashboard(){
+  if(cond !== "custom" && dashCache[cond]){ el("dashboard").innerHTML = dashCache[cond]; return; }
+  var html = buildDashHTML();
+  if(cond !== "custom") dashCache[cond] = html;
+  el("dashboard").innerHTML = html;
 }
 
 el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; cond = "custom"; markConditions(); scheduleDash(); };
+
+var mathModal = el("mathModal");
+el("mathBtn").onclick = function(){ mathModal.hidden = false; };
+el("mathClose").onclick = function(){ mathModal.hidden = true; };
+mathModal.onclick = function(e){ if(e.target === mathModal) mathModal.hidden = true; };
+document.addEventListener("keydown", function(e){ if(e.key === "Escape") mathModal.hidden = true; });
 
 buildConditions();
 buildSliders();

@@ -374,7 +374,7 @@ def _heat_rgb(f):
 
 
 def save_svg_heatmap(name, title, matrix, vmin=0.0, vmax=1.0,
-                     xlabel="time", ylabel="channel"):
+                     xlabel="time  t", ylabel="channel  i"):
     rows, cols = len(matrix), len(matrix[0])
     W, H = 680, 360
     ml, mr, mt, mb = 64, 24, 44, 50
@@ -481,7 +481,7 @@ def cmd_fp(args):
         curve = [S(ge * (g - 0.5)) for g in grid]
         title = ("Where the allocator can settle (effective gain %.3g)" % ge)
         save_svg_lines("fp_beta%s" % _num(p.beta), title,
-                       "its state: collapsed -> flooded", "where it moves next",
+                       "g  -  allocator state (0 collapsed, 1 flooded)", "next-step g",
                        [("next state", grid, curve), ("stays put", grid, grid)],
                        points=[(g, g, st and not hopf) for g, st in fps])
 
@@ -521,7 +521,8 @@ def cmd_sweep(args):
     if maybe_plot(args):
         save_svg_lines("sweep_beta%s" % _num(p.beta),
                        "sweep, beta = %s, area = %.2f" % (_num(p.beta), area),
-                       "drive I", "g", [("up", ups, g_up), ("down", downs, g_down)])
+                       "external drive  I  (stress / input)", "steady-state g  (0 - 1)",
+                       [("up", ups, g_up), ("down", downs, g_down)])
 
 
 def cmd_recover(args):
@@ -577,11 +578,11 @@ def cmd_recover(args):
 
     if maybe_plot(args):
         save_svg_lines("recover_slowing", "Recovery slows approaching the edge",
-                       "toward the tipping point ->", "recovery time",
+                       "loop gain  beta  (fold at 4)", "recovery time",
                        [("recovery time", betas, return_times)], markers=True)
         tt = [i * p.dt for i in range(len(fold_dev))]
         save_svg_lines("recover_shape", "Two shapes of slowing near the edge",
-                       "time after a nudge", "distance from euthymia",
+                       "time after nudge  t", "deviation  g - 1/2",
                        [("fold: monotone crawl", tt, fold_dev),
                         ("Hopf: a growing ring", tt, hopf_dev)])
 
@@ -626,7 +627,7 @@ def cmd_series(args):
             series.append(("a (slow)", t, a))
         save_svg_lines("series_%s" % (getattr(args, "preset", None) or "custom"),
                        "series, preset = %s" % getattr(args, "preset", None),
-                       "time", "g", series)
+                       "time  t", "g  (0 collapsed, 1 flooded)", series)
 
 
 def cmd_integration(args):
@@ -701,7 +702,7 @@ def cmd_profile(args):
             print("  a flexible gain tracks the context: almost no mismatch.")
         print("  a fixed profile either way: it slides with the environment,"
               " it never switches.")
-        xs, ys, xlabel, ylabel, fname = vol, mismatch, "volatility", "gain mismatch", "autism"
+        xs, ys, xlabel, ylabel, fname = vol, mismatch, "volatility  v  (0 steady, 1 changing)", "gain mismatch  g - g*", "autism"
     else:
         # ADHD: value of a reward falls with delay as 1/(1+k*d). Steep k makes
         # the immediate option outrank the delayed one. The allocator's weight
@@ -716,7 +717,7 @@ def cmd_profile(args):
               " (%.2f) and starved from the delayed (%.2f)."
               % (1.0 / p.k, weight[0], weight[-1]))
         print("  both arms at once, held steady: a miscalibration, not a swing.")
-        xs, ys, xlabel, ylabel, fname = delay, weight, "reward delay", "weight", "adhd"
+        xs, ys, xlabel, ylabel, fname = delay, weight, "reward delay  d", "weight  g*(d)", "adhd"
 
     if maybe_plot(args):
         save_svg_lines("profile_%s" % fname, "%s profile" % fname,

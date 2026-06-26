@@ -103,8 +103,15 @@ the views that tell its story honestly -- a malfunction shows its dynamics, a
 miscalibration leads with its fixed profile and shows the (normal) dynamics after as
 contrast. Bipolar omits the hysteresis sweep on purpose, since that stickiness is the
 fold's, not the Hopf's. A collapsed "Adjust the dials yourself" panel exposes a
-slider for every knob for anyone who wants to drive the model by hand. No build step
-and no dependencies.
+slider for every knob for anyone who wants to drive the model by hand, and a "Show
+the math" button opens the full update rule, the parameters, and the bifurcation
+conditions (the fold at effective gain 4, the Hopf from the Jacobian trace). The
+captions read plainly while the axes carry the symbols (g, I, beta, d, v, g*), so
+legibility and precision sit side by side. No build step and no dependencies.
+
+It stays snappy: the heavy loops are allocation-free, `recover` is computed once,
+and each condition's dashboard is cached, so the first condition renders in about
+a tenth of a second and every switch after is instant.
 
 Three ways to open it:
 
