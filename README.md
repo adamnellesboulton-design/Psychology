@@ -94,15 +94,17 @@ self-contained SVG files to `out/` (any browser opens them; no libraries needed)
 ## Browser UI
 
 The UI is `docs/index.html`: one self-contained page that runs the whole model in
-the browser (a faithful JavaScript port of the update rule in `allocator_toy.py`),
-with a slider for every knob, a preset menu, and a view switch (fixed points, sweep,
-recover, series, integration, the two profiles). Drag a slider and the graph updates
-live, in real time: the model recomputes once per animation frame as the knob moves,
-redrawing the plot and a plain-language reading of what it means. The app is built
-for a feel of the model, so its captions talk in the model's own terms (flooding and
-collapse, snap versus slide, swinging, fragmenting) rather than the numbers; the CLI
-keeps the technical readout. No build step and no dependencies; each view computes
-with only the knobs it uses, so the rest stay dimmed.
+the browser (a faithful JavaScript port of the update rule in `allocator_toy.py`).
+It is built around the five conditions: pick one and the page shows all of that
+condition's graphs at once, each with a plain-language reading of what it means.
+The captions talk in the model's own terms (flooding and collapse, swinging,
+fragmenting, mania and depression) rather than the numbers, and each condition shows
+the views that tell its story honestly -- a malfunction shows its dynamics, a
+miscalibration leads with its fixed profile and shows the (normal) dynamics after as
+contrast. Bipolar omits the hysteresis sweep on purpose, since that stickiness is the
+fold's, not the Hopf's. A collapsed "Adjust the dials yourself" panel exposes a
+slider for every knob for anyone who wants to drive the model by hand. No build step
+and no dependencies.
 
 Three ways to open it:
 

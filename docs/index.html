@@ -37,9 +37,14 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;}
 #plots{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;min-height:120px;}
 #plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
-#text{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:0;}
-#text .t{font-size:16px;font-weight:700;margin-bottom:8px;}
-#text .b{font-size:14px;line-height:1.6;color:#33333b;white-space:pre-wrap;}
+#dashboard{display:flex;flex-direction:column;gap:14px;}
+.dash-intro{background:#eef2ff;border:1px solid #dde3ff;border-radius:12px;padding:13px 18px;font-size:14px;line-height:1.55;color:#33333b;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+.card-title{font-size:15px;font-weight:700;margin-bottom:6px;}
+.card svg{max-width:100%;height:auto;display:block;margin:0 auto 4px;}
+.card-body{font-size:13.5px;line-height:1.55;color:#33333b;white-space:pre-wrap;margin-top:6px;}
+#advanced summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);outline:none;}
+#advanced[open] summary{margin-bottom:12px;}
 footer{padding:6px 24px 26px;color:var(--muted);font-size:12px;}
 footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
 </style>
@@ -48,36 +53,23 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
 <header>
   <h1>Allocator Toy Model</h1>
   <p>The mind competes for one channel of attention, and a regulator decides what gets through.
-  Pick a condition or turn a dial, and see why mania swings, why psychosis fragments and sticks,
-  and why ADHD and autism hold one fixed shape. Runs entirely in your browser.</p>
+  Pick a condition to see all of its graphs at once -- why mania swings, why psychosis fragments
+  and sticks, why ADHD and autism hold one fixed shape. Runs entirely in your browser.</p>
 </header>
 <main>
   <section id="controls">
     <div class="group">
-      <label>Start with a condition</label>
-      <select id="preset">
-        <option value="custom">custom (your own settings)</option>
-        <option value="baseline">Healthy baseline</option>
-        <option value="schizophrenia">Schizophrenia (integration fails)</option>
-        <option value="bipolar">Bipolar (the level swings)</option>
-        <option value="adhd">ADHD (pulled to the now)</option>
-        <option value="autism">Autism (a gain that won't shift)</option>
-      </select>
+      <label>Condition</label>
+      <div id="conditions" class="seg"></div>
     </div>
-    <div class="group">
-      <label>What to look at</label>
-      <div id="views" class="seg"></div>
-      <p id="viewhint" class="hint"></p>
-    </div>
-    <div class="group">
-      <label>Or turn the dials yourself</label>
+    <details class="group" id="advanced">
+      <summary>Adjust the dials yourself</summary>
       <div id="sliders"></div>
       <label class="check"><input type="checkbox" id="adapt" checked> mood regulator on</label>
-    </div>
+    </details>
   </section>
   <section id="out">
-    <div id="plots"></div>
-    <div id="text"></div>
+    <div id="dashboard"></div>
   </section>
 </main>
 <footer>
@@ -447,7 +439,7 @@ function viewIntegration(p){
   var coherent = mean(spreads) < 0.1;
   var wide = downsample(r.g, 240), mat = [];
   for(var ch=0;ch<n;ch++){ mat.push(wide.map(function(row){ return row[ch]; })); }
-  var svg = svgHeatmap("Twelve streams of experience over time (bright = flooded, dark = flat)", mat);
+  var svg = svgHeatmap("Streams of experience over time (bright = flooded, dark = flat)", mat);
   var body = coherent
     ? "Each row is a different stream of experience -- a sense, a train of "
       + "thought. Here they all move together as one: a single mood or tone laid "
@@ -522,7 +514,7 @@ var RUNNERS = {
 var VIEW_USES = {
   fp: ["beta", "ka"], sweep: ["beta"], recover: [],
   series: ["beta", "I", "ka", "c", "noise"],
-  integration: ["beta", "c", "noise"],
+  integration: ["beta", "ka", "c", "noise"],
   profile_adhd: ["k"], profile_autism: ["lam"]
 };
 
@@ -552,33 +544,64 @@ var PRESETS = {
   baseline:{beta:2}, schizophrenia:{beta:8, c:0.2, ka:0},
   bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, k:0.95}, autism:{beta:2, lam:0.1}
 };
-var VIEWS = [
-  {key:"series", label:"Over time", hint:"Watch the state move: a mood swing, a collapse that sticks, or steady."},
-  {key:"fp", label:"Where it settles", hint:"The resting states: one steady place, two traps, or a swing around the middle."},
-  {key:"sweep", label:"Why triggers stick", hint:"Why removing a stressor doesn't undo an episode."},
-  {key:"recover", label:"Early warning", hint:"How a breakdown announces itself before it happens."},
-  {key:"integration", label:"One mind or many", hint:"Whether the mind stays one coherent field or fragments."},
-  {key:"profile_adhd", label:"ADHD: now vs later", hint:"Why the same person hyperfocuses yet can't start a dull task."},
-  {key:"profile_autism", label:"Autism: steady vs changing", hint:"Why the same person is overwhelmed in some settings and under-reacts in others."}
+// The five conditions are the primary control. Each shows the graphs that tell
+// its story honestly: a malfunction shows its dynamics; a miscalibration leads
+// with its fixed profile, with the (normal) dynamics shown after as contrast.
+// Bipolar omits the hysteresis sweep on purpose -- that is the fold's stickiness,
+// which is the schizophrenia mechanism, not bipolar's Hopf.
+var CONDITIONS = [
+  {key:"baseline", label:"Healthy baseline"},
+  {key:"schizophrenia", label:"Schizophrenia"},
+  {key:"bipolar", label:"Bipolar"},
+  {key:"adhd", label:"ADHD"},
+  {key:"autism", label:"Autism"}
 ];
+var CONDITION_VIEWS = {
+  baseline:      ["series", "fp", "integration"],
+  schizophrenia: ["series", "fp", "integration", "sweep", "recover"],
+  bipolar:       ["series", "fp", "integration", "recover"],
+  adhd:          ["profile_adhd", "series", "fp"],
+  autism:        ["profile_autism", "series", "fp"],
+  custom:        ["series", "fp", "integration", "sweep", "recover", "profile_adhd", "profile_autism"]
+};
+var CONDITION_INTROS = {
+  baseline: "<strong>Healthy baseline.</strong> A working allocator: it rests at a steady "
+    + "middle and slides back when nudged. This is what 'working' looks like -- the "
+    + "reference the conditions depart from.",
+  schizophrenia: "<strong>Schizophrenia -- a malfunction of coherence.</strong> The "
+    + "integrating gain has folded: the field loses its single shared state, fragments "
+    + "across channels, and settles into a captured state rather than returning.",
+  bipolar: "<strong>Bipolar -- a malfunction of level.</strong> The regulator that holds "
+    + "mood level has started to oscillate: a single normal middle (euthymia) that has lost "
+    + "its damping, so the field swings between mania and depression and returns.",
+  adhd: "<strong>ADHD -- a miscalibration, not a malfunction.</strong> Both controls work "
+    + "and the contest stays honest; only the scoring rule is off. Time is discounted "
+    + "steeply, so one fixed setting over-weights the immediate and starves the distant. "
+    + "(The dynamics below are normal -- the fault is the fixed profile, not a swing.)",
+  autism: "<strong>Autism -- a miscalibration, not a malfunction.</strong> Both controls "
+    + "work; only the flexibility of response is off. The gain is held fixed instead of "
+    + "tracking the situation, too strong in changing settings and too weak in steady ones. "
+    + "(The dynamics below are normal -- the fault is the fixed profile, not a swing.)",
+  custom: "<strong>Custom settings.</strong> Your own dials, with all seven views shown."
+};
 
 var state = Object.assign({}, DEF);
-var view = "series";
+var cond = "bipolar";
 function el(id){ return document.getElementById(id); }
 
-function buildViews(){
-  var box = el("views");
-  VIEWS.forEach(function(v){
+function buildConditions(){
+  var box = el("conditions");
+  CONDITIONS.forEach(function(c){
     var b = document.createElement("button");
-    b.textContent = v.label; b.dataset.key = v.key;
-    b.onclick = function(){ view = v.key; markViews(); applyDim(); render(); };
+    b.textContent = c.label; b.dataset.key = c.key;
+    b.onclick = function(){ cond = c.key; applyPreset(c.key); markConditions(); renderDashboard(); };
     box.appendChild(b);
   });
 }
-function currentView(){ for(var i=0;i<VIEWS.length;i++){ if(VIEWS[i].key===view) return VIEWS[i]; } return VIEWS[0]; }
-function markViews(){
-  el("viewhint").textContent = currentView().hint;
-  Array.prototype.forEach.call(el("views").children, function(b){ b.classList.toggle("active", b.dataset.key===view); });
+function markConditions(){
+  Array.prototype.forEach.call(el("conditions").children, function(b){
+    b.classList.toggle("active", b.dataset.key === cond);
+  });
 }
 function buildSliders(){
   var box = el("sliders");
@@ -593,8 +616,7 @@ function buildSliders(){
     inp.oninput = function(){
       state[kn.key] = parseFloat(inp.value);
       val.textContent = (+state[kn.key]).toFixed(2);
-      el("preset").value = "custom";
-      requestRender();
+      cond = "custom"; markConditions(); scheduleDash();
     };
     wrap.appendChild(row); wrap.appendChild(inp); box.appendChild(wrap);
   });
@@ -603,53 +625,45 @@ function syncSliders(){
   KNOBS.forEach(function(kn){ el("s_"+kn.key).value = state[kn.key]; el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2); });
   el("adapt").checked = !!state.adapt;
 }
-function applyDim(){
-  var uses = VIEW_USES[view] || [];
-  Array.prototype.forEach.call(el("sliders").children, function(w){
-    w.classList.toggle("dim", uses.indexOf(w.dataset.key) < 0);
-  });
-}
 function applyPreset(name){
   state = Object.assign({}, DEF);
   if(PRESETS[name]) Object.assign(state, PRESETS[name]);
   state.adapt = el("adapt").checked ? 1 : 0;
   syncSliders();
 }
-// Live updates while dragging: render at most once per animation frame, so the
-// graph keeps up with the slider in real time without piling up recomputations.
-// A frame coalesces however many input events land within it; the heavier views
-// simply redraw as fast as they compute.
-var rafPending = false;
-function requestRender(){
-  if(rafPending) return;
-  rafPending = true;
-  requestAnimationFrame(function(){
-    rafPending = false;
-    render();
+
+// Recomputing every view is heavier than one, so dial edits are debounced rather
+// than run per animation frame. Condition clicks render immediately.
+var dashTimer = null;
+function scheduleDash(){ if(dashTimer) clearTimeout(dashTimer); dashTimer = setTimeout(renderDashboard, 160); }
+
+function renderDashboard(){
+  var dash = el("dashboard");
+  dash.innerHTML = "";
+  var intro = document.createElement("div");
+  intro.className = "dash-intro";
+  intro.innerHTML = CONDITION_INTROS[cond] || CONDITION_INTROS.custom;
+  dash.appendChild(intro);
+  var views = CONDITION_VIEWS[cond] || CONDITION_VIEWS.custom;
+  views.forEach(function(vk){
+    var out;
+    try { out = runView(vk, state); } catch(e){ return; }
+    var card = document.createElement("div"); card.className = "card";
+    var t = document.createElement("div"); t.className = "card-title"; t.textContent = out.title || "";
+    var plots = document.createElement("div"); plots.innerHTML = out.svgs.join("");
+    var body = document.createElement("div"); body.className = "card-body"; body.textContent = out.body || "";
+    card.appendChild(t); card.appendChild(plots); card.appendChild(body);
+    dash.appendChild(card);
   });
 }
-function render(){
-  var out;
-  try { out = runView(view, state); }
-  catch(e){ el("text").textContent = "error: " + e; return; }
-  el("plots").innerHTML = out.svgs.join("");
-  var box = el("text");
-  box.innerHTML = "";
-  var h = document.createElement("div"); h.className = "t"; h.textContent = out.title || "";
-  var b = document.createElement("div"); b.className = "b"; b.textContent = out.body || "";
-  box.appendChild(h); box.appendChild(b);
-}
 
-el("preset").onchange = function(){ if(this.value!=="custom") applyPreset(this.value); render(); };
-el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; requestRender(); };
+el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; cond = "custom"; markConditions(); scheduleDash(); };
 
-buildViews();
+buildConditions();
 buildSliders();
 applyPreset("bipolar");
-el("preset").value = "bipolar";
-markViews();
-applyDim();
-render();
+markConditions();
+renderDashboard();
 </script>
 </body>
 </html>
