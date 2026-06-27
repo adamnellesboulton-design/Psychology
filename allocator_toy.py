@@ -52,6 +52,15 @@ a Hopf rings, the wobble growing and lengthening as the damping dies.
 MISCALIBRATION = both controls intact (beta low) but a target (k or lam) set odd;
 the output holds a fixed two-armed offset and never switches -> ADHD, autism.
 
+PART TWO (the coalition layer) goes one level down: a module is itself a coalition
+of sub-units that flow toward standing (won access). How steeply standing rises
+with a coalition's mass is the RECRUITMENT GAIN -- subcritical leaves the mass
+fluid (health), supercritical condenses it onto one coalition (capture/monopoly).
+A bandwagon (coordination) recruitment makes that condensation a first-order fold,
+bistable and hysteretic, so capture relapses. Part one is the adiabatic limit of
+this (hold the slow memberships fixed; the fast bidding is the contest above). See
+condense / relapse / phases, and "The Coalition Beneath the Module".
+
 House rules if Claude Code edits this:
 - ASCII only. No em or en dashes, no curly quotes, no unicode math or block
   glyphs. Use straight quotes and the ASCII intensity ramp in RAMP.
@@ -255,6 +264,54 @@ def fixed_points(beta, drive=0.0):
         if not any(abs(g - g2) < 1e-3 for g2, _ in out):
             out.append((g, st))
     return out
+
+
+# ----------------------------------------------------------------------------
+# Part two: the coalition layer (recruitment beneath the module)
+# ----------------------------------------------------------------------------
+#
+# Part one took the roster of modules as given. But a module is itself a coalition
+# of sub-units, and a sub-unit does better attached to a coalition that holds the
+# channel often, so sub-units flow toward standing (won access). How steeply a
+# coalition's standing rises with its mass is the RECRUITMENT GAIN, and it decides
+# the layer:
+#   - subcritical (sublinear / proportional): mass stays fluid, spread across many
+#     coalitions -- health.
+#   - supercritical (superlinear): mass condenses onto one coalition -- capture.
+# The order parameter is CONCENTRATION, the largest coalition's share of the mass.
+# When recruitment is a BANDWAGON (joining pays more the more have already joined:
+# a coordination / stag hunt one level down), the condensation is first-order --
+# bistable and hysteretic, a fold whose hysteresis is relapse. That fold is the
+# fold of part one run one level down, which is why this layer reuses settle().
+
+def condense(gamma, bias=0.0, phi0=0.5):
+    """Settle the dominant coalition's mass fraction under the bandwagon
+    recruitment fold  phi = S(gamma*(phi - 0.5) + bias).  gamma is the recruitment
+    gain (how steeply standing rises with mass), bias favors one coalition. It is
+    the bidding fold of part one one level down: gamma>4 is bistable (first-order
+    condensation, hysteresis, relapse); gamma<4 leaves the layer fluid."""
+    return settle(Params(beta=gamma, adapt=False), bias, g0=phi0)
+
+
+def preferential_attachment(n, alpha, steps, rng):
+    """Grow n coalitions by recruitment: each step one unit of mass joins
+    coalition i with probability proportional to (mass_i)**alpha. alpha is the
+    recruitment gain. alpha<1 spreads mass evenly (fluid); alpha=1 is proportional
+    (neutral drift, a power law); alpha>1 condenses mass onto one coalition (the
+    Bose-Einstein condensation of the fitness-network literature). Returns the
+    final masses as shares of the total, largest first."""
+    m = [1.0] * n
+    for _ in range(steps):
+        w = [mi ** alpha for mi in m]
+        r = rng.random() * sum(w)
+        acc = 0.0
+        for i in range(n):
+            acc += w[i]
+            if r <= acc:
+                m[i] += 1.0
+                break
+    total = sum(m)
+    return sorted((mi / total for mi in m), reverse=True)
 
 
 # ----------------------------------------------------------------------------
@@ -775,6 +832,113 @@ def cmd_profile(args):
                        xlabel, ylabel, [(ylabel, xs, ys)])
 
 
+# ----------------------------------------------------------------------------
+# Part two commands: the coalition layer
+# ----------------------------------------------------------------------------
+
+def cmd_condense(args):
+    """Recruitment and condensation. Sub-units flow to standing, so how steeply
+    standing rises with a coalition's mass -- the recruitment gain -- decides
+    whether mass stays fluid across many coalitions or condenses onto one. The
+    monopoly part one had to posit becomes the condensed phase of a dynamics."""
+    n, steps = 24, 3000
+    alphas = linspace(0.6, 1.8, 13)
+    conc = []
+    for a in alphas:
+        shares = [preferential_attachment(n, a, steps, random.Random(s))[0]
+                  for s in range(3)]            # average largest share for smoothness
+        conc.append(mean(shares))
+    print("recruitment and condensation: largest coalition's share vs gain")
+    print("  recruitment gain (alpha) %.1f to %.1f, %d coalitions"
+          % (alphas[0], alphas[-1], n))
+    print("  share: " + sparkline(conc, 0.0, 1.0))
+    print("         low gain (fluid) ......... high gain (condensed)")
+    lo = preferential_attachment(n, 0.7, steps, random.Random(1))
+    hi = preferential_attachment(n, 1.6, steps, random.Random(1))
+    print("  mass across coalitions, largest first (each scaled to its own max):")
+    print("    gain 0.7 (fluid):     " + sparkline(lo, 0.0, lo[0]))
+    print("    gain 1.6 (condensed): " + sparkline(hi, 0.0, hi[0]))
+    crit = next((a for a, k in zip(alphas, conc) if k > 0.5), None)
+    if crit is not None:
+        print("  condensation sets in near gain ~ %.2f: past it one coalition" % crit)
+        print("  holds a finite fraction of the mass -- monopoly, derived not posited.")
+
+
+def cmd_relapse(args):
+    """Why capture relapses. A bandwagon recruitment (supercritical gain) makes
+    the condensation first-order: bistable and hysteretic, so capture sets in
+    abruptly, sits above the level that triggered it, and clears only when the
+    pressure drops well below -- the relapse part one had to assume. A
+    proportional recruitment (subcritical gain) slides on and off with no gap.
+    So relapse is the signature of bandwagon recruitment."""
+    gamma_hi, gamma_lo = 8.0, 2.0      # supercritical (bandwagon) vs subcritical
+    bmax, n_pts = 4.0, 161
+    ups = linspace(-bmax, bmax, n_pts)
+    downs = ups[::-1]
+
+    def sweep(gamma):
+        phi = condense(gamma, ups[0], phi0=0.02)
+        up = []
+        for b in ups:
+            phi = condense(gamma, b, phi0=phi)
+            up.append(phi)
+        down = []
+        for b in downs:
+            phi = condense(gamma, b, phi0=phi)
+            down.append(phi)
+        return up, down
+
+    hi_up, hi_down = sweep(gamma_hi)
+    lo_up, lo_down = sweep(gamma_lo)
+    area_hi = _loop_area(ups + downs, hi_up + hi_down)
+    area_lo = _loop_area(ups + downs, lo_up + lo_down)
+
+    print("recruitment hysteresis: does capture relapse?")
+    print("  bandwagon gain %.0f (supercritical): loop area = %.2f" % (gamma_hi, area_hi))
+    print("    up:   " + sparkline(downsample(hi_up, 60), 0.0, 1.0))
+    print("    down: " + sparkline(downsample(hi_down, 60), 0.0, 1.0))
+    print("    %s" % ("abrupt and hysteretic -- first-order: capture relapses."
+                      if area_hi > 0.3 else "no gap (unexpected at this gain)."))
+    print("  proportional gain %.0f (subcritical): loop area = %.2f" % (gamma_lo, area_lo))
+    print("    up:   " + sparkline(downsample(lo_up, 60), 0.0, 1.0))
+    print("    down: " + sparkline(downsample(lo_down, 60), 0.0, 1.0))
+    print("    slides on and off, no gap -- no relapse.")
+
+
+def cmd_phases(args):
+    """The phase diagram. Two axes -- the recruitment gain that drives
+    condensation, and the integrating coupling that holds the shared state up --
+    turn part one's three settling shapes into three phases. Capture
+    (condensation) is high gain; fragmentation (anarchy) is low integration;
+    health is the wedge where the gain is subcritical and integration holds."""
+    gains = linspace(1.0, 8.0, 30)
+    cs = linspace(0.0, 3.0, 13)
+    kappa = [condense(g, 0.0, phi0=0.9) for g in gains]     # condensed fraction
+    sigma = []                                              # cross-channel spread
+    for c in cs:
+        q = Params(beta=8.0, ka=2.0, c=c, noise=0.05)
+        g0 = linspace(0.4, 0.6, 8)
+        _, g, _ = simulate(q, 400.0, n=8, g0=g0, rng=random.Random(0))
+        half = len(g) // 2
+        sigma.append(mean([pstdev(g[s]) for s in range(half, len(g))]))
+
+    print("phase diagram: recruitment gain (across) vs integration (up)")
+    print("  C capture (condensed)   F fragmentation (anarchy)   . health")
+    for yi in range(len(cs) - 1, -1, -1):
+        row = []
+        for xi in range(len(gains)):
+            if kappa[xi] > 0.6:
+                row.append("C")
+            elif sigma[yi] > 0.1:
+                row.append("F")
+            else:
+                row.append(".")
+        print("  c=%4.1f |%s|" % (cs[yi], "".join(row)))
+    print("         +" + "-" * len(gains) + "+")
+    print("          gain %.0f%sgain %.0f" % (gains[0], " " * (len(gains) - 12), gains[-1]))
+    print("  health is the top-left wedge: subcritical gain, integration intact.")
+
+
 def cmd_demo(args):
     """The whole contrast, narrated."""
     print("=" * 70)
@@ -1028,6 +1192,11 @@ def cmd_guide(args):
     print("  integration   12 channels: one coherent field, or fragmented basins")
     print("  profile       the miscalibrations: a fixed two-armed curve, never switches")
     print()
+    print("PART TWO -- the coalition layer (recruitment beneath the module):")
+    print("  condense      recruitment gain vs concentration: fluid -> condensed (monopoly)")
+    print("  relapse       recruitment hysteresis: bandwagon recruitment makes capture relapse")
+    print("  phases        phase diagram: recruitment gain vs integration -> the three shapes")
+    print()
     print("MALFUNCTION  = a slow control loses stability. The integrating gain folds")
     print("               (schizophrenia: fragments); the homeostat crosses a Hopf")
     print("               (bipolar: orbits euthymia). Either way the output moves.")
@@ -1037,6 +1206,14 @@ def cmd_guide(args):
     print("Both bifurcations slow near the edge (recover), but a fold slows monotonically")
     print("and a Hopf rings, which says which tip is coming. The established, fragmented")
     print("schizophrenic state is chaos rather than a fold, so it does not slow at all.")
+    print()
+    print("PART TWO goes one level down: a module is itself a coalition of sub-units, and")
+    print("sub-units flow to standing (won access). How steeply standing rises with mass")
+    print("is the RECRUITMENT GAIN. Subcritical leaves the mass fluid (health); supercritical")
+    print("condenses it onto one coalition (capture/monopoly). A bandwagon recruitment makes")
+    print("that condensation a first-order fold -- bistable, hysteretic -- so capture relapses;")
+    print("relapse is the signature of bandwagon recruitment. Part one is the adiabatic limit:")
+    print("hold the slow memberships fixed and the fast bidding is exactly the contest above.")
     print()
     print("Output is ASCII sparklines and heatmaps by default, so it runs in a bare")
     print("terminal. Nothing to install: pure standard library, and --plot writes SVG.")
@@ -1153,7 +1330,9 @@ def build_parser():
     for name, fn in (("demo", cmd_demo), ("guide", cmd_guide), ("fp", cmd_fp),
                      ("sweep", cmd_sweep), ("recover", cmd_recover),
                      ("series", cmd_series), ("integration", cmd_integration),
-                     ("profile", cmd_profile)):
+                     ("profile", cmd_profile),
+                     ("condense", cmd_condense), ("relapse", cmd_relapse),
+                     ("phases", cmd_phases)):
         doc = fn.__doc__ or name
         sp = sub.add_parser(name, help=doc.splitlines()[0],
                             description=doc,

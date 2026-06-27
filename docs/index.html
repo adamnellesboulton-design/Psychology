@@ -42,10 +42,12 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 .dash-intro{background:#eef2ff;border:1px solid #dde3ff;border-radius:12px;padding:13px 18px;font-size:14px;line-height:1.55;color:#33333b;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;border-left:4px solid #cdd6e6;}
 .card-field{border-left:4px solid #5bbd8e;background:#f6fbf8;}
+.card-layer{border-left:4px solid #8c6fd6;background:#f8f6fd;}
 .card-title{font-size:15px;font-weight:700;margin-bottom:6px;}
 .scope{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:10px;margin-right:9px;vertical-align:middle;}
 .scope-one{background:#eef1f6;color:#5a6b86;}
 .scope-field{background:#dcf1e7;color:#1f7a52;}
+.scope-layer{background:#eccae6;color:#7e3f86;}
 .scope-legend{font-size:12.5px;color:var(--muted);margin-top:9px;line-height:1.5;}
 .scope-legend .scope{margin-right:5px;}
 .card svg{max-width:100%;height:auto;display:block;margin:0 auto 4px;}
@@ -86,6 +88,11 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
     <div class="group">
       <label>Condition</label>
       <div id="conditions" class="seg"></div>
+    </div>
+    <div class="group">
+      <label>Part two &mdash; the coalition layer</label>
+      <div id="conditions2" class="seg"></div>
+      <p class="hint">One level below the modules: the contest among the sub-units a module is made of.</p>
     </div>
     <div class="group">
       <label class="check"><input type="checkbox" id="noisy" checked> add randomness <span style="color:var(--muted)">&nbsp;(more lifelike)</span></label>
@@ -263,6 +270,35 @@ function loopArea(xs, ys){
   return 0.5*Math.abs(s);
 }
 
+// ---- part two: the coalition layer (recruitment beneath the module) ---------
+// A module is itself a coalition of sub-units that flow toward standing. How
+// steeply standing rises with a coalition's mass is the recruitment gain:
+// subcritical leaves the mass fluid (health), supercritical condenses it onto one
+// coalition (capture). A bandwagon recruitment makes that condensation a
+// first-order fold -- hysteresis, relapse. The bandwagon fold is the bidding fold
+// one level down, so condense() reuses settle().
+function condense(gamma, bias, phi0){
+  var p = defaults(); p.beta = gamma; p.adapt = 0; p.ka = 0; p.c = 1;
+  return settle(p, bias, phi0);
+}
+// Grow n coalitions: each step a unit of mass joins coalition i with probability
+// proportional to mass_i^alpha. alpha<1 spreads (fluid), alpha=1 is proportional,
+// alpha>1 condenses onto one coalition (Bose-Einstein condensation). Returns the
+// final shares of the total, largest first.
+function preferentialAttachment(n, alpha, steps, rng){
+  var m = []; for(var i=0;i<n;i++) m.push(1.0);
+  for(var s=0;s<steps;s++){
+    var w = [], tot = 0;
+    for(var i=0;i<n;i++){ var wi = Math.pow(m[i], alpha); w.push(wi); tot += wi; }
+    var r = rng()*tot, acc = 0;
+    for(var i=0;i<n;i++){ acc += w[i]; if(r <= acc){ m[i] += 1; break; } }
+  }
+  var total = 0; for(var i=0;i<n;i++) total += m[i];
+  var sh = m.map(function(x){ return x/total; });
+  sh.sort(function(a,b){ return b-a; });
+  return sh;
+}
+
 // ---- helpers --------------------------------------------------------------
 
 function clamp01(f){ return f<0 ? 0 : (f>1 ? 1 : f); }
@@ -407,6 +443,36 @@ function svgHeatmap(title, matrix){
   }
   o.push('<text x="'+(ml+pw/2)+'" y="'+(H-14)+'" text-anchor="middle">time  t</text>');
   o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">channel  i</text>');
+  o.push("</svg>");
+  return o.join("\n");
+}
+// Categorical phase map: grid[r][c] is 0 health, 1 fragmentation, 2 capture.
+// xs / ys are the axis tick values (gain across, integration up).
+var PHASE_COL = ["#2ca02c", "#7e57c2", "#d62728"], PHASE_NAME = ["health", "fragmentation", "capture"];
+function svgPhaseMap(title, xlabel, ylabel, xs, ys, grid){
+  var rows=grid.length, cols=grid[0].length;
+  var W=680, H=420, ml=64, mr=150, mt=44, mb=54;
+  var pw=W-ml-mr, ph=H-mt-mb, cw=pw/cols, chh=ph/rows;
+  var o=[svgOpen(W,H)];
+  o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
+  for(var r=0;r<rows;r++) for(var c=0;c<cols;c++){
+    var x=ml+c*cw, y=mt+(rows-1-r)*chh;     // row 0 = lowest y, drawn at bottom
+    o.push('<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+(cw+0.6).toFixed(2)+'" height="'+(chh+0.6).toFixed(2)+'" fill="'+PHASE_COL[grid[r][c]]+'"/>');
+  }
+  // a few axis ticks
+  for(var i=0;i<=4;i++){
+    var fx=i/4, xv=xs[0]+(xs[xs.length-1]-xs[0])*fx;
+    o.push('<text x="'+(ml+fx*pw)+'" y="'+(mt+ph+16)+'" text-anchor="middle" fill="#444">'+esc(fmt(xv))+'</text>');
+    var yv=ys[0]+(ys[ys.length-1]-ys[0])*fx;
+    o.push('<text x="'+(ml-8)+'" y="'+(mt+ph-fx*ph+4)+'" text-anchor="end" fill="#444">'+esc(fmt(yv))+'</text>');
+  }
+  o.push('<text x="'+(ml+pw/2)+'" y="'+(H-12)+'" text-anchor="middle">'+esc(xlabel)+'</text>');
+  o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">'+esc(ylabel)+'</text>');
+  for(var k=0;k<3;k++){
+    var ly=mt+10+k*20;
+    o.push('<rect x="'+(ml+pw+14)+'" y="'+(ly-9)+'" width="13" height="13" fill="'+PHASE_COL[k]+'"/>');
+    o.push('<text x="'+(ml+pw+32)+'" y="'+(ly+2)+'">'+esc(PHASE_NAME[k])+'</text>');
+  }
   o.push("</svg>");
   return o.join("\n");
 }
@@ -750,9 +816,110 @@ function viewProfileAutism(p){
   return {svgs:[svg], title:"Autism: a response that won't shift", body:body};
 }
 
+// ---- part two views: the coalition layer -----------------------------------
+
+function viewCondense(){
+  var n=24, steps=2400, alphas=linspace(0.6,1.8,16);
+  var conc = alphas.map(function(a){
+    var s=0; for(var seed=0;seed<3;seed++) s += preferentialAttachment(n,a,steps,mulberry32(seed+1))[0];
+    return s/3;
+  });
+  var crit=null; for(var i=0;i<alphas.length;i++){ if(conc[i]>0.5){ crit=alphas[i]; break; } }
+  var svg1 = svgLines("How concentrated the field gets, as recruitment steepens",
+    "recruitment gain (how steeply standing rises with size)",
+    "largest coalition's share",
+    [{label:"concentration", xs:alphas, ys:conc}],
+    {hlines:[{y:0.5, label:"half the mass in one", color:"#888"}],
+     notes: crit!=null ? [{x:crit, y:0.5, text:"condensation", color:"#b0282d", anchor:"start"}] : []});
+  var lo = preferentialAttachment(n,0.7,steps,mulberry32(1));
+  var hi = preferentialAttachment(n,1.6,steps,mulberry32(1));
+  var ranks = []; for(var i=0;i<n;i++) ranks.push(i+1);
+  var svg2 = svgLines("The mass across coalitions (ranked largest first)",
+    "coalition rank", "share of the mass",
+    [{label:"fluid (low gain)", xs:ranks, ys:lo, color:"#2ca02c"},
+     {label:"condensed (high gain)", xs:ranks, ys:hi, color:"#d62728"}], {markers:true});
+  var body = "A module is not an atom: it is a coalition of sub-units, and a sub-unit "
+    + "does better attached to a coalition that wins the channel often. So sub-units "
+    + "flow toward standing, and how steeply standing rises with a coalition's size -- "
+    + "the recruitment gain -- decides everything. Low gain (left, green) keeps the mass "
+    + "fluid, spread across many coalitions of similar size: a plural field. Past a "
+    + "critical gain it condenses (right, red): one coalition grabs a finite fraction of "
+    + "the mass and the rest empty out. That condensation is the monopoly the first layer "
+    + "had to assume -- here it is derived as a phase, the winner-take-all of preferential "
+    + "attachment.";
+  return {svgs:[svg1, svg2], title:"Recruitment: when the field condenses", body:body};
+}
+
+function viewRelapse(){
+  var bmax=4.0, nPts=121, ups=linspace(-bmax,bmax,nPts), downs=ups.slice().reverse();
+  function sweep(gamma){
+    var phi=condense(gamma, ups[0], 0.02), up=[], dn=[];
+    ups.forEach(function(b){ phi=condense(gamma,b,phi); up.push(phi); });
+    downs.forEach(function(b){ phi=condense(gamma,b,phi); dn.push(phi); });
+    return {up:up, dn:dn, area:loopArea(ups.concat(downs), up.concat(dn))};
+  }
+  var hi=sweep(8), lo=sweep(2);
+  var loop = ups.map(function(x,i){return [x,hi.up[i]];}).concat(downs.map(function(x,i){return [x,hi.dn[i]];}));
+  var svg1 = svgLines("Bandwagon recruitment (supercritical): capture relapses",
+    "pressure toward one coalition", "largest coalition's share",
+    [{label:"building up", xs:ups, ys:hi.up}, {label:"easing back", xs:downs, ys:hi.dn}],
+    {fills:[{points:loop, color:"rgba(214,39,40,0.10)"}],
+     arrows:[{series:0,fracs:[0.34,0.6]},{series:1,fracs:[0.34,0.6]}],
+     notes:[{x:0,y:0.5,text:"same pressure -> two states",color:"#b0282d"}]});
+  var svg2 = svgLines("Proportional recruitment (subcritical): no relapse",
+    "pressure toward one coalition", "largest coalition's share",
+    [{label:"building up", xs:ups, ys:lo.up}, {label:"easing back", xs:downs, ys:lo.dn}],
+    {arrows:[{series:0,fracs:[0.4]},{series:1,fracs:[0.4]}]});
+  var body = "Superlinearity gives condensation, but the first layer needs more: it needs "
+    + "the fold, the all-or-none capture that resists climbing back and so relapses. That "
+    + "asks recruitment to be a bandwagon -- joining a coalition pays more the more have "
+    + "already joined, a coordination (stag hunt) one level down. Top: with a bandwagon, "
+    + "raise the pressure toward one coalition and the field stays fluid, then jumps to "
+    + "condensed; ease it back and it stays condensed well past where it tipped, clearing "
+    + "only when the pressure drops far below (the shaded gap). That hysteresis is relapse. "
+    + "Bottom: proportional recruitment slides on and off with no gap. So relapse is the "
+    + "signature of bandwagon recruitment -- a capture that came on gradually and reversed "
+    + "gradually would be evidence against it.";
+  return {svgs:[svg1, svg2], title:"Why capture relapses", body:body};
+}
+
+function viewPhases(){
+  var gains=linspace(1,8,30), cs=linspace(0,3,13);
+  var kappa=gains.map(function(g){ return condense(g,0,0.9); });
+  var sigma=cs.map(function(c){
+    var p=defaults(); p.beta=8; p.ka=2; p.c=c; p.noise=0.05;
+    var g0=linspace(0.4,0.6,8);
+    var r=simulate(p,400,8,null,g0,0.5,gaussFactory(0));
+    var half=Math.floor(r.g.length/2), sp=[];
+    for(var s=half;s<r.g.length;s++) sp.push(pstdev(r.g[s]));
+    return mean(sp);
+  });
+  var grid=[];                                  // grid[r] = row at cs[r] (low to high)
+  for(var r=0;r<cs.length;r++){
+    var row=[];
+    for(var c=0;c<gains.length;c++){
+      row.push(kappa[c]>0.6 ? 2 : (sigma[r]>0.1 ? 1 : 0));
+    }
+    grid.push(row);
+  }
+  var svg = svgPhaseMap("The three shapes as one phase diagram",
+    "recruitment gain (drives condensation)", "integration (holds the field)",
+    gains, cs, grid);
+  var body = "The first layer named three shapes -- health, fragmentation, monopoly -- and "
+    + "listed them. Two axes turn them into one phase diagram. Across: the recruitment gain "
+    + "that drives condensation. Up: the integrating coupling that holds the shared state. "
+    + "Capture (red) is the high-gain phase, one coalition condensing the mass, whatever the "
+    + "coupling. Fragmentation (purple) is the low-integration phase, the field coming apart "
+    + "with no shared state to coordinate it -- anarchy. Health (green) is the wedge between: "
+    + "subcritical gain and integration intact, the field plural and yet coherent. The two "
+    + "pathologies stop being two posits and become two ways off one plateau.";
+  return {svgs:[svg], title:"One plateau, two ways off", body:body};
+}
+
 var RUNNERS = {
   fp: viewFp, sweep: viewSweep, recover: viewRecover, series: viewSeries,
-  integration: viewIntegration, profile_adhd: viewProfileAdhd, profile_autism: viewProfileAutism
+  integration: viewIntegration, profile_adhd: viewProfileAdhd, profile_autism: viewProfileAutism,
+  condense: viewCondense, relapse: viewRelapse, phasemap: viewPhases
 };
 
 // Which knobs each view actually reads. A view computes with only these; the
@@ -772,7 +939,8 @@ var VIEW_USES = {
 var VIEW_SCOPE = {
   series: "one", fp: "one", sweep: "one", recover: "one",
   profile_adhd: "one", profile_autism: "one",
-  integration: "field"
+  integration: "field",
+  condense: "layer", relapse: "layer", phasemap: "layer"
 };
 
 function runView(view, state){
@@ -836,8 +1004,17 @@ var CONDITION_VIEWS = {
   bipolar:       ["series", "fp", "integration", "recover"],
   adhd:          ["profile_adhd", "series", "fp"],
   autism:        ["profile_autism", "series", "fp"],
-  custom:        ["series", "fp", "integration", "sweep", "recover", "profile_adhd", "profile_autism"]
+  custom:        ["series", "fp", "integration", "sweep", "recover", "profile_adhd", "profile_autism"],
+  p2_condense:   ["condense"],
+  p2_relapse:    ["relapse"],
+  p2_phases:     ["phasemap"]
 };
+// Part two: the coalition layer, one level below the modules.
+var P2_CONDITIONS = [
+  {key:"p2_condense", label:"Condensation"},
+  {key:"p2_relapse",  label:"Relapse"},
+  {key:"p2_phases",   label:"Phase map"}
+];
 var CONDITION_INTROS = {
   baseline: "<strong>Healthy baseline.</strong> A working allocator: it rests at a steady "
     + "middle and slides back when nudged. This is what 'working' looks like -- the "
@@ -858,25 +1035,41 @@ var CONDITION_INTROS = {
     + "work; only the flexibility of response is off. The gain is held fixed instead of "
     + "tracking the situation, too strong in changing settings and too weak in steady ones. "
     + "(The dynamics below are normal -- the fault is the fixed profile, not a swing.)",
-  custom: "<strong>Custom settings.</strong> Your own dials, with all seven views shown."
+  custom: "<strong>Custom settings.</strong> Your own dials, with all seven views shown.",
+  p2_condense: "<strong>Part two: recruitment.</strong> A module is itself a coalition of "
+    + "sub-units that flow toward standing. How steeply standing rises with size -- the "
+    + "recruitment gain -- decides whether the field stays fluid or condenses onto one "
+    + "coalition. The monopoly part one had to posit becomes the condensed phase of a dynamics.",
+  p2_relapse: "<strong>Part two: relapse.</strong> The fold part one assigns to capture "
+    + "survives this layer only if recruitment is a bandwagon (joining pays more the more "
+    + "have joined). Then condensation is first-order and hysteretic -- which is what relapse is.",
+  p2_phases: "<strong>Part two: the phase diagram.</strong> Recruitment gain and integration "
+    + "are two axes, and part one's three settling shapes become three phases on them -- "
+    + "capture, fragmentation, and the health wedge between."
 };
 
 var state = Object.assign({}, DEF);
 var cond = "bipolar";
 function el(id){ return document.getElementById(id); }
 
-function buildConditions(){
-  var box = el("conditions");
-  CONDITIONS.forEach(function(c){
+function buildConditionGroup(boxId, list){
+  var box = el(boxId);
+  list.forEach(function(c){
     var b = document.createElement("button");
     b.textContent = c.label; b.dataset.key = c.key;
     b.onclick = function(){ cond = c.key; applyPreset(c.key); markConditions(); renderDashboard(); };
     box.appendChild(b);
   });
 }
+function buildConditions(){
+  buildConditionGroup("conditions", CONDITIONS);
+  buildConditionGroup("conditions2", P2_CONDITIONS);
+}
 function markConditions(){
-  Array.prototype.forEach.call(el("conditions").children, function(b){
-    b.classList.toggle("active", b.dataset.key === cond);
+  ["conditions", "conditions2"].forEach(function(id){
+    Array.prototype.forEach.call(el(id).children, function(b){
+      b.classList.toggle("active", b.dataset.key === cond);
+    });
   });
 }
 function makeSlider(box, kn, onInput){
@@ -933,14 +1126,18 @@ function scheduleDash(){ if(dashTimer) clearTimeout(dashTimer); dashTimer = setT
 var dashCache = {};
 var SCOPE_BADGE = {
   one:   '<span class="scope scope-one">one channel</span>',
-  field: '<span class="scope scope-field">the whole field &middot; 12 channels</span>'
+  field: '<span class="scope scope-field">the whole field &middot; 12 channels</span>',
+  layer: '<span class="scope scope-layer">part two &middot; the coalition layer</span>'
 };
 function buildDashHTML(){
-  var html = '<div class="dash-intro">' + (CONDITION_INTROS[cond] || CONDITION_INTROS.custom)
-    + '<div class="scope-legend">Each chart is tagged ' + SCOPE_BADGE.one
-    + ' (a single bid\'s gain -- only ever high or low) or ' + SCOPE_BADGE.field
-    + ' (all channels at once, where the flooding and collapse arms show together).</div></div>';
   var views = CONDITION_VIEWS[cond] || CONDITION_VIEWS.custom;
+  var legend = (views.indexOf("condense") >= 0 || views.indexOf("relapse") >= 0 || views.indexOf("phasemap") >= 0)
+    ? 'These charts are tagged ' + SCOPE_BADGE.layer + ' -- they live one level below the modules, '
+      + 'in the contest among the sub-units that make a module up.'
+    : 'Each chart is tagged ' + SCOPE_BADGE.one + ' (a single bid\'s gain -- only ever high or low) or '
+      + SCOPE_BADGE.field + ' (all channels at once, where the flooding and collapse arms show together).';
+  var html = '<div class="dash-intro">' + (CONDITION_INTROS[cond] || CONDITION_INTROS.custom)
+    + '<div class="scope-legend">' + legend + '</div></div>';
   views.forEach(function(vk){
     var out;
     try { out = runView(vk, state); } catch(e){ return; }
