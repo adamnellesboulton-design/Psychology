@@ -87,7 +87,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
     <div class="group">
       <label>Environmental stressor</label>
       <div id="stressSliders"></div>
-      <p class="hint">A push from outside, with optional per-tick jitter -- drives the time-series and field views.</p>
+      <p class="hint">A push from outside, with optional per-tick jitter. Valence leans the random kicks toward flooding (+) or collapse (-). Drives the time-series and field views.</p>
     </div>
     <details class="group" id="advanced">
       <summary>Adjust the dials yourself</summary>
@@ -120,7 +120,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
         <tr><td><i>I</i></td><td>environmental stressor</td><td><i>c</i></td><td>integrating gain (coupling)</td></tr>
         <tr><td><i>k</i></td><td>discount steepness (ADHD)</td><td>&lambda;</td><td>flexibility (autism)</td></tr>
       </table>
-      <p class="note">The stressor <i>I</i> is a steady outside push; an optional per-tick jitter adds a fresh uniform draw in &plusmn;&delta; each step, so <i>I</i>(<i>t</i>) = <i>I</i><sub>0</sub> + &delta;&#8201;U(&minus;1,1). It drives the time-series and field views.</p>
+      <p class="note">The stressor <i>I</i> is a steady outside push; an optional per-tick jitter adds a random kick of size up to &delta; each step. A valence &nu; &isin; [&minus;1,1] leans those kicks: the kick is upward with probability (1+&nu;)/2, so <i>I</i>(<i>t</i>) = <i>I</i><sub>0</sub> &plusmn; &delta;&#8201;U(0,1) with the sign biased by &nu; (&nu; &gt; 0 toward flooding, &nu; &lt; 0 toward collapse). It drives the time-series and field views.</p>
 
       <h4>Resting states &amp; bifurcations <span class="note">&nbsp; (single channel; at rest <i>a</i> = <i>g</i>)</span></h4>
       <div class="eq">effective gain &nbsp; G = &beta; &minus; &kappa;, &nbsp;&nbsp; fixed points: &nbsp; <i>g</i> = S&#40;&#8201;G(<i>g</i>&minus;&frac12;)&#8201;&#41;</div>
@@ -279,7 +279,7 @@ function svgOpen(w,h){
 }
 function svgLines(title, xlabel, ylabel, series, opts){
   opts = opts || {};
-  var W=680, H=420, ml=64, mr=150, mt=44, mb=52;
+  var W=680, H=420, ml=78, mr=180, mt=44, mb=52;
   var px0=ml, px1=W-mr, py0=H-mb, py1=mt;
   var xsAll=[], ysAll=[];
   series.forEach(function(s){ s.xs.forEach(function(x){xsAll.push(x);}); s.ys.forEach(function(y){ysAll.push(y);}); });
@@ -292,6 +292,11 @@ function svgLines(title, xlabel, ylabel, series, opts){
   function X(x){ return px0 + (x-xmin)/(xmax-xmin)*(px1-px0); }
   function Y(y){ return py0 + (y-ymin)/(ymax-ymin)*(py1-py0); }
   var o = [svgOpen(W,H)];
+  // shaded regions (e.g. the hysteresis gap), drawn behind everything
+  if(opts.fills) opts.fills.forEach(function(f){
+    var pts = f.points.map(function(p){ return X(p[0]).toFixed(2)+","+Y(p[1]).toFixed(2); }).join(" ");
+    o.push('<polygon points="'+pts+'" fill="'+f.color+'" stroke="none"/>');
+  });
   o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
   o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px1+'" y2="'+py0+'" stroke="black"/>');
   o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px0+'" y2="'+py1+'" stroke="black"/>');
@@ -301,17 +306,38 @@ function svgLines(title, xlabel, ylabel, series, opts){
     var yv = ymin+(ymax-ymin)*i/5, yp = Y(yv);
     o.push('<text x="'+(px0-8)+'" y="'+(yp+4)+'" text-anchor="end" fill="#444">'+esc(fmt(yv))+'</text>');
   }
+  // dashed horizontal reference lines (e.g. "back to normal")
+  if(opts.hlines) opts.hlines.forEach(function(h){
+    var yp = Y(h.y), hc = h.color || "#888";
+    o.push('<line x1="'+px0+'" y1="'+yp.toFixed(2)+'" x2="'+px1+'" y2="'+yp.toFixed(2)+'" stroke="'+hc+'" stroke-width="1" stroke-dasharray="5 4"/>');
+    if(h.label) o.push('<text x="'+(px1-4)+'" y="'+(yp-5).toFixed(2)+'" text-anchor="end" fill="'+hc+'" font-size="11">'+esc(h.label)+'</text>');
+  });
   o.push('<text x="'+((px0+px1)/2)+'" y="'+(H-14)+'" text-anchor="middle">'+esc(xlabel)+'</text>');
-  o.push('<text x="16" y="'+((py0+py1)/2)+'" transform="rotate(-90 16 '+((py0+py1)/2)+')" text-anchor="middle">'+esc(ylabel)+'</text>');
+  o.push('<text x="14" y="'+((py0+py1)/2)+'" transform="rotate(-90 14 '+((py0+py1)/2)+')" text-anchor="middle">'+esc(ylabel)+'</text>');
+  function arrowHead(px,py,ang,col){
+    var d=5;
+    return '<path d="M0,0 L'+(-d*1.7)+','+(-d)+' L'+(-d*1.7)+','+d+' Z" fill="'+col+'" transform="translate('+px.toFixed(1)+','+py.toFixed(1)+') rotate('+(ang*180/Math.PI).toFixed(1)+')"/>';
+  }
   series.forEach(function(s, i){
-    var col = PALETTE[i % PALETTE.length];
+    var col = s.color || PALETTE[i % PALETTE.length];
+    var w = s.width || 1.6;
+    var dash = s.dash ? ' stroke-dasharray="'+s.dash+'"' : '';
     var pts = "";
     for(var j=0;j<s.xs.length;j++){ pts += X(s.xs[j]).toFixed(2)+","+Y(s.ys[j]).toFixed(2)+" "; }
-    o.push('<polyline fill="none" stroke="'+col+'" stroke-width="1.6" points="'+pts+'"/>');
+    o.push('<polyline fill="none" stroke="'+col+'" stroke-width="'+w+'"'+dash+' points="'+pts+'"/>');
     if(opts.markers){ for(var j=0;j<s.xs.length;j++){ o.push('<circle cx="'+X(s.xs[j]).toFixed(2)+'" cy="'+Y(s.ys[j]).toFixed(2)+'" r="2.5" fill="'+col+'"/>'); } }
     var ly = mt + 10 + i*18;
-    o.push('<line x1="'+(px1+12)+'" y1="'+ly+'" x2="'+(px1+32)+'" y2="'+ly+'" stroke="'+col+'" stroke-width="2.5"/>');
+    o.push('<line x1="'+(px1+12)+'" y1="'+ly+'" x2="'+(px1+32)+'" y2="'+ly+'" stroke="'+col+'" stroke-width="2.5"'+dash+'/>');
     o.push('<text x="'+(px1+38)+'" y="'+(ly+4)+'">'+esc(s.label)+'</text>');
+  });
+  // directional arrowheads along chosen series (e.g. the sweep's travel direction)
+  if(opts.arrows) opts.arrows.forEach(function(ar){
+    var s = series[ar.series], col = s.color || PALETTE[ar.series % PALETTE.length];
+    (ar.fracs || [0.5]).forEach(function(fr){
+      var n=s.xs.length, idx=Math.max(1, Math.min(n-1, Math.round(fr*(n-1))));
+      var x0=X(s.xs[idx-1]), y0=Y(s.ys[idx-1]), x1=X(s.xs[idx]), y1=Y(s.ys[idx]);
+      o.push(arrowHead(x1, y1, Math.atan2(y1-y0, x1-x0), col));
+    });
   });
   if(opts.points){
     opts.points.forEach(function(p){
@@ -319,6 +345,10 @@ function svgLines(title, xlabel, ylabel, series, opts){
       o.push('<circle cx="'+X(p[0]).toFixed(2)+'" cy="'+Y(p[1]).toFixed(2)+'" r="4" fill="'+col+'" stroke="black"/>');
     });
   }
+  // free text notes placed in data coordinates
+  if(opts.notes) opts.notes.forEach(function(nt){
+    o.push('<text x="'+X(nt.x).toFixed(1)+'" y="'+Y(nt.y).toFixed(1)+'" text-anchor="'+(nt.anchor||"middle")+'" fill="'+(nt.color||"#333")+'" font-size="'+(nt.size||12)+'" font-style="italic">'+esc(nt.text)+'</text>');
+  });
   o.push("</svg>");
   return o.join("\n");
 }
@@ -359,10 +389,17 @@ function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
 
 // The environmental stressor as a drive(t): a steady push plus a fresh per-tick
 // fluctuation, the same value for every channel at a given tick. null = none.
+// Valence leans the random kicks: each tick the kick is upward (toward flooding)
+// with probability (1+valence)/2, so valence > 0 biases stress toward flooding,
+// valence < 0 toward collapse, valence = 0 is even. Magnitude stays random.
 function stressDrive(){
   if(stress === 0 && stressJitter === 0) return null;
-  var s = stress, j = stressJitter, rng = mulberry32(20240517);
-  return function(){ return s + j * (2*rng() - 1); };
+  var s = stress, j = stressJitter, pUp = (1 + stressValence)/2, rng = mulberry32(20240517);
+  if(j === 0) return function(){ return s; };
+  return function(){
+    var sign = (rng() < pUp) ? 1 : -1;
+    return s + sign * j * rng();
+  };
 }
 
 // Each view returns {svgs, title, body}: a friendly heading and a plain-language
@@ -422,24 +459,36 @@ function viewSweep(p){
   ups.forEach(function(d){ g = settle(p, d, g); gUp.push(g); });
   downs.forEach(function(d){ g = settle(p, d, g); gDown.push(g); });
   var folded = loopArea(ups.concat(downs), gUp.concat(gDown)) > 0.3;
-  var svg = svgLines("Turn the pressure up, then back down",
-    "external drive  I  (stress / input)",
-    "steady-state g  (0 - 1)",
-    [{label:"pushing up", xs:ups, ys:gUp}, {label:"easing back", xs:downs, ys:gDown}]);
+  // Arrows show the direction of travel; for a folded loop, shade the gap between
+  // the up and down paths and label it, so the stickiness is a visible region.
+  var opts = {arrows: [{series:0, fracs:[0.30,0.58]}, {series:1, fracs:[0.30,0.58]}]};
+  if(folded){
+    var loop = ups.map(function(x,i){ return [x, gUp[i]]; })
+                  .concat(downs.map(function(x,i){ return [x, gDown[i]]; }));
+    opts.fills = [{points: loop, color: "rgba(214,39,40,0.10)"}];
+    opts.notes = [{x:0, y:0.5, text:"same pressure -> two possible states", color:"#b0282d"}];
+  }
+  var svg = svgLines("Push the pressure up (blue), then ease it back down (orange)",
+    "outside pressure   (toward collapse  <-  0  ->  toward flooding)",
+    "where the state settles  (0 collapsed, 1 flooded)",
+    [{label:"pushing up", xs:ups, ys:gUp}, {label:"easing back", xs:downs, ys:gDown}], opts);
   var body = folded
-    ? "We slowly turn up an outside pressure -- a stressor, a strong input -- and "
-      + "then take it away again, tracing the state up and back down. The two paths "
-      + "do not match. Once the pressure tips the mind into the flooded state, it "
-      + "stays there even after you remove the pressure entirely; to get back you "
-      + "have to push hard the other way. This is why removing whatever triggered "
-      + "an episode does not end the episode -- the state has its own grip now, "
-      + "independent of the trigger. (Dynamicists call the gap 'hysteresis'.)"
-    : "We slowly turn up an outside pressure and then take it away, tracing the "
-      + "state up and back down. The two paths lie right on top of each other: the "
-      + "state simply follows the pressure and returns the moment it is gone, with "
-      + "no memory of where it has been. Nothing latches. This is what a steady "
-      + "mind does -- and what a fixed trait (ADHD, autism) does too: it tracks the "
-      + "situation and never sticks.";
+    ? "Read it as one trip with a there-and-back. Follow the blue line left to "
+      + "right (arrows): we raise an outside pressure and the state climbs, then "
+      + "jumps up to flooded. Now follow the orange line back, right to left: we "
+      + "lower the pressure again -- but the state does NOT drop back where it rose. "
+      + "It stays stuck high until the pressure falls much further, then snaps down. "
+      + "The shaded gap is the catch: at any pressure inside it the mind could be "
+      + "either high or low, depending on where it has been. That is why removing "
+      + "whatever triggered an episode does not end the episode -- the state has its "
+      + "own grip now. (Dynamicists call the gap 'hysteresis'.)"
+    : "Read it as one trip with a there-and-back. The blue line (arrows pointing "
+      + "right) raises an outside pressure; the orange line eases it back down. Here "
+      + "the two lie exactly on top of each other: the state just follows the "
+      + "pressure and returns the moment it is gone, with no gap and no memory of "
+      + "where it has been. Nothing latches. This is what a steady mind does -- and "
+      + "what a fixed trait (ADHD, autism) does too: it tracks the situation and "
+      + "never sticks.";
   sweepCache = {beta: p.beta, val: {svgs:[svg], title:"Why a trigger sticks", body:body}};
   return sweepCache.val;
 }
@@ -470,20 +519,27 @@ function viewRecover(p){
   var foldDev = downsample(col(rf.g,0).map(function(v){return v-0.5;}), 1200);
   var hopfDev = downsample(col(rh.g,0).map(function(v){return v-0.5;}), 1200);
   var svg1 = svgLines("Recovery gets slower as a breakdown nears",
-    "loop gain  beta  (fold at 4)", "recovery time",
+    "loop gain  beta  (fold at 4)", "time to recover from a nudge",
     [{label:"recovery time", xs:betas, ys:rts}], {markers:true});
-  var svg2 = svgLines("The shape of recovery says which breakdown",
-    "time after nudge  t", "deviation  g - 1/2",
-    [{label:"toward psychosis: a straight crawl", xs:tt, ys:foldDev},
-     {label:"toward a mood episode: a growing wobble", xs:tt, ys:hopfDev}]);
-  var body = "Give the mind a small nudge and watch how it recovers, as we move it "
-    + "closer to a breakdown (left to right, top chart). The closer it gets, the "
-    + "longer recovery takes -- so a system heading for a tip turns sluggish weeks "
-    + "before anything visibly changes. That sluggishness is a measurable warning "
-    + "sign. And the shape of the recovery (bottom chart) tells you which kind of "
-    + "breakdown is coming: the slide toward psychosis creeps back in a straight "
-    + "line, while the run-up to a mood episode wobbles, the wobble growing into "
-    + "the very swing that is about to take over.";
+  // Mark the first dip below zero on the ringing curve, so "overshoot" is visible.
+  var lim = Math.floor(hopfDev.length*0.45), ti = 0;
+  for(var qi=1; qi<lim; qi++){ if(hopfDev[qi] < hopfDev[ti]) ti = qi; }
+  var svg2 = svgLines("How it bounces back tells you which breakdown is coming",
+    "time after a nudge", "distance from the middle  (0 = recovered)",
+    [{label:"toward psychosis", xs:tt, ys:foldDev, color:"#1f77b4"},
+     {label:"toward mood swings", xs:tt, ys:hopfDev, color:"#ff7f0e"}],
+    {hlines:[{y:0, label:"back to normal", color:"#888"}],
+     notes:[{x:tt[ti], y:hopfDev[ti]+0.010, text:"overshoots", color:"#c25e00", anchor:"start"}]});
+  var body = "Give the mind a small nudge and watch how it returns to the middle. "
+    + "The top chart: the nearer a breakdown, the longer it takes to recover -- a "
+    + "system heading for a tip turns sluggish well before anything visibly changes, "
+    + "which is a measurable warning sign. The bottom chart shows the SHAPE of that "
+    + "return, and the shape says which breakdown is coming. The blue line (toward "
+    + "psychosis) just slides straight back to the middle and stops. The orange line "
+    + "(toward mood swings) shoots past the middle to the opposite extreme and "
+    + "back, again and again -- ringing like a struck bell, the very swing that is "
+    + "about to take over. The dashed line is 'recovered'; only the orange one "
+    + "crosses it.";
   recoverCache = {svgs:[svg1, svg2], title:"Early warning, before it tips", body:body};
   return recoverCache;
 }
@@ -517,10 +573,18 @@ function viewSeries(p){
       + "into one extreme and stays. The thing that normally holds the mind "
       + "together has given way, so there is no steady middle to come back to. "
       + "(Turn the mood regulator up to see a swing instead of a stuck collapse.)";
-  else
-    body = "This is the overall state over time. It sits near a steady middle, "
-      + "wobbling a little with random noise -- nothing builds, nothing tips. A "
-      + "regulator doing its job.";
+  else {
+    body = "This is the overall state over time. It settles to a steady level and "
+      + "holds there, wobbling a little with random noise -- nothing builds, nothing "
+      + "tips. A regulator doing its job.";
+    var lean = stress + (stressJitter > 0 ? stressValence : 0);
+    if(Math.abs(lean) > 1e-9)
+      body += (lean > 0
+        ? " The outside stressor has lifted that level toward flooding, but it is "
+          + "still one steady level -- shifted, not swinging or stuck."
+        : " The outside stressor has pressed that level toward collapse, but it is "
+          + "still one steady level -- shifted, not swinging or stuck.");
+  }
   return {svgs:[svg], title:"The state over time", body:body};
 }
 
@@ -635,7 +699,7 @@ var INTEG_NOISE_ON  = 0.08, INTEG_NOISE_OFF  = 0.01;
 // Environmental stressor: a steady push plus a fresh per-tick fluctuation, shared
 // across channels (it is the external drive I, made time-varying). Applied to the
 // dynamic views (series, integration); 0/0 means no stressor.
-var stress = 0, stressJitter = 0;
+var stress = 0, stressJitter = 0, stressValence = 0;
 
 var KNOBS = [
   {key:"beta", name:"Self-reinforcement (winning breeds winning)", min:0, max:10, step:0.05},
@@ -646,7 +710,8 @@ var KNOBS = [
 ];
 var STRESS_KNOBS = [
   {key:"stress", name:"Stressor (steady push)", min:-3, max:3, step:0.1},
-  {key:"stressJitter", name:"Stressor jitter (per tick)", min:0, max:2, step:0.05}
+  {key:"stressJitter", name:"Stressor jitter (per tick)", min:0, max:2, step:0.05},
+  {key:"stressValence", name:"Stressor valence (which way it leans)", min:-1, max:1, step:0.05}
 ];
 var DEF = {beta:2, ka:0, c:1, k:0.2, lam:1, adapt:1};
 // The homeostat (ka) is a live control in every condition, so the bar moves
@@ -736,7 +801,9 @@ function buildSliders(){
   // is selected, so they clear the cache and re-render but keep the condition.
   STRESS_KNOBS.forEach(function(kn){
     makeSlider(el("stressSliders"), kn, function(v, val){
-      if(kn.key === "stress") stress = v; else stressJitter = v;
+      if(kn.key === "stress") stress = v;
+      else if(kn.key === "stressJitter") stressJitter = v;
+      else stressValence = v;
       val.textContent = v.toFixed(2);
       dashCache = {}; scheduleDash();
     });
@@ -746,6 +813,7 @@ function syncSliders(){
   KNOBS.forEach(function(kn){ el("s_"+kn.key).value = state[kn.key]; el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2); });
   el("s_stress").value = stress; el("v_stress").textContent = stress.toFixed(2);
   el("s_stressJitter").value = stressJitter; el("v_stressJitter").textContent = stressJitter.toFixed(2);
+  el("s_stressValence").value = stressValence; el("v_stressValence").textContent = stressValence.toFixed(2);
   el("adapt").checked = !!state.adapt;
 }
 function applyPreset(name){

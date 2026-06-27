@@ -37,8 +37,10 @@ crosses its Hopf into a sustained swing.
            beta>4); beta-ka=4 is that fold.
     I      ENVIRONMENTAL STRESSOR: a steady push from outside (stress, a salient
            input, a dopaminergic shift), with an optional per-tick jitter that
-           adds a fresh uniform draw each step so the push fluctuates. It drives
-           the time-series and field views; can be added to any condition.
+           adds a fresh random kick each step so the push fluctuates, and a
+           valence that leans those kicks toward flooding (+) or collapse (-) so
+           the stress is not just shaky but directional. It drives the
+           time-series and field views; can be added to any condition.
     ka     HOMEOSTAT strength. The homeostat sets the bar (the slow variable a:
            the level of relevance a bid must clear) and opposes the loop, so the
            effective gain is beta-ka. It keeps a single euthymic resting state
@@ -104,8 +106,10 @@ bipolar crosses a bifurcation.
 
 Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. The
 environmental stressor is `--I` (a steady push) with `--stress-jitter` (a per-tick
-fluctuation); e.g. `series --preset baseline --I 1.5 --stress-jitter 0.5` shoves a
-calm field upward. By default the output is ASCII sparklines and heatmaps in the
+fluctuation) and `--stress-valence` (lean the jitter: +1 toward flooding, -1
+toward collapse); e.g. `series --preset baseline --stress-jitter 1.5
+--stress-valence 1` shoves a calm field upward with biased random kicks. By
+default the output is ASCII sparklines and heatmaps in the
 terminal. Add `--plot` to also write self-contained SVG files to `out/` (any
 browser opens them; no libraries needed).
 
@@ -122,8 +126,9 @@ miscalibration leads with its fixed profile and shows the (normal) dynamics afte
 contrast. Bipolar omits the hysteresis sweep on purpose, since that stickiness is the
 fold's, not the Hopf's. A "randomness" toggle (on by default) keeps a little noise
 riding on every run so the dynamics look lifelike rather than suspiciously clean,
-and an environmental-stressor control (a steady push with optional per-tick jitter)
-can be added to any condition to shove the field around. A collapsed "Adjust the
+and an environmental-stressor control (a steady push, with optional per-tick jitter
+and a valence that leans the random kicks toward flooding or collapse) can be added
+to any condition to shove the field around. A collapsed "Adjust the
 dials yourself" panel exposes a slider for every knob for anyone who wants to drive
 the model by hand, and a "Show the math" button opens a typeset panel (real symbols
 -- Greek, subscripts, overdots, the Jacobian trace) with the full update rule, the
