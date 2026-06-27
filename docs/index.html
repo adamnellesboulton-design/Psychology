@@ -107,7 +107,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
     <p class="sub">One equation, run with different settings. Illustrative, not fitted to data.</p>
     <div id="mathBody">
       <h4>State</h4>
-      <p><i>g</i><sub>i</sub> &isin; (0,1): the gain on relevance in channel <i>i</i> &mdash; near 1 is flooding, near 0 is collapse, &frac12; is euthymia. &nbsp; <i>a</i> &isin; (0,1): the bar, a slow threshold each bid must clear &mdash; engaged in every condition, so it moves throughout; only bipolar crosses its Hopf.</p>
+      <p><i>g</i><sub>i</sub> &isin; (0,1): the gain on relevance in channel <i>i</i> &mdash; near 1 the flooding arm, near 0 the collapse arm, &frac12; euthymia. The two arms are one fault, not two: a raised bar floods some channels while it starves others at the same time, so a real field shows both together (only bipolar separates them in time). &nbsp; <i>a</i> &isin; (0,1): the bar, a slow threshold each bid must clear &mdash; engaged in every condition, so it moves throughout; only bipolar crosses its Hopf.</p>
 
       <h4>Dynamics <span class="note">&nbsp; (overdot = d/d<i>t</i>; S(<i>x</i>) = 1/(1+e<sup>&minus;<i>x</i></sup>), S&prime;(0) = &frac14;)</span></h4>
       <div class="eq">&tau;<sub>g</sub>&#8201;&#x0121;<sub>i</sub> = &minus;<i>g</i><sub>i</sub> + S&#8201;&#40;&#8201;&beta;(<i>g</i><sub>i</sub>&minus;&frac12;) + <i>I</i> &minus; &kappa;(<i>a</i>&minus;&frac12;) + <i>c</i>(&#x1E21;&minus;<i>g</i><sub>i</sub>) + &sigma;&xi;<sub>i</sub>&#8201;&#41;</div>
@@ -475,8 +475,12 @@ function viewFp(p){
       + "basins and no steady middle: one where everything floods with meaning (the "
       + "over-connected, urgent world of psychosis) and one where meaning drains "
       + "away (flat, withdrawn), split by an unstable tipping point (the red dot). "
-      + "The arrows run away from that point -- nudged off it, the mind slides into "
-      + "one basin and stays. This is the broken-integration picture of schizophrenia.";
+      + "This is one channel, though: across the whole field the same fold captures "
+      + "some channels into the flooded basin while it starves others in the "
+      + "collapsed one, at the same time. So psychosis runs both arms together -- "
+      + "flooding (positive symptoms, salience everywhere) and collapse (negative "
+      + "symptoms, the quiet starved out) as one fault, not a state the mind picks "
+      + "one of. The 'one mind, or many?' view shows that whole field.";
   else if(hopf)
     body = "There is just one resting place here -- a single balanced middle -- "
       + "because the regulator holds the mind to one centre instead of letting it "
@@ -654,10 +658,13 @@ function viewIntegration(p){
       + "level is unstable, but the mind is still whole."
     : "Each row is a different stream of experience -- a sense, a train of "
       + "thought. Here they come apart, each settling into its own state and "
-      + "staying there, with nothing tying them into a single whole. No shared "
-      + "mood, no one coherent mind -- the binding itself has failed. That is the "
-      + "fragmentation of psychosis, and unlike a mood swing it does not knit back "
-      + "together on its own.";
+      + "staying there, with nothing tying them into a single whole. The bright "
+      + "rows are the flooding arm (over-weighted, salience landing everywhere -- "
+      + "positive symptoms) and the dark rows the collapse arm (starved and quiet "
+      + "-- negative symptoms), running at the same time: one fault showing both "
+      + "arms together, not a mind that is simply flooded or simply blank. No "
+      + "shared mood, no one coherent mind -- the binding has failed, and unlike a "
+      + "mood swing it does not knit back together on its own.";
   return {svgs:[svg], title:"One mind, or many?", body:body};
 }
 
@@ -796,7 +803,9 @@ var CONDITION_INTROS = {
     + "across channels, and settles into a captured state rather than returning.",
   bipolar: "<strong>Bipolar -- a malfunction of level.</strong> The regulator that holds "
     + "mood level has started to oscillate: a single normal middle (euthymia) that has lost "
-    + "its damping, so the field swings between mania and depression and returns.",
+    + "its damping, so the field swings between mania (the flooding arm) and depression (the "
+    + "collapse arm) and returns -- the one fault where the two arms take turns in time "
+    + "rather than appearing together.",
   adhd: "<strong>ADHD -- a miscalibration, not a malfunction.</strong> Both controls work "
     + "and the contest stays honest; only the scoring rule is off. Time is discounted "
     + "steeply, so one fixed setting over-weights the immediate and starves the distant. "

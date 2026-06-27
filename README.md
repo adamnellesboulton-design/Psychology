@@ -15,8 +15,15 @@ nothing to install, no numpy, no matplotlib. Start with
 
     high g  =  the flooding arm        low g  =  the collapse arm
 
-Both arms are two readings of one variable, not two faults. The whole model is one
-update rule run with different knobs:
+The two arms are one fault, not two, and not a choice between them: the same raised
+bar over-weights some bids while starving others, so a real (many-channel) field
+shows flooding and collapse *together* -- positive and negative symptoms at once --
+rather than the mind being in one or the other. Only bipolar separates the two arms
+in time, swinging from one pole to the other. (A single channel's g is necessarily
+just high or low; the co-occurrence lives in the many-channel `integration` view,
+where some channels flood while others go quiet at the same moment.)
+
+The whole model is one update rule run with different knobs:
 
     dg_i/dt = ( -g_i + S( beta*(g_i - 0.5) + I - ka*(a - 0.5)
                           + c*(mean(g) - g_i) + noise_i ) ) / tau_g

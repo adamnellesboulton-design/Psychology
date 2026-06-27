@@ -12,8 +12,13 @@ default output is ASCII; --plot writes self-contained SVG files (any browser
 opens them).
 
 The one moving part is g, the allocator's net gain on relevance, in (0, 1).
-high g = the flooding arm; low g = the collapse arm. Both arms are two readings
-of one variable. The whole model is one update rule run with different knobs:
+high g = the flooding arm; low g = the collapse arm. They are two readings of one
+variable and one fault, not two, and not a choice between them: a raised bar
+over-weights some channels while starving others, so a real (many-channel) field
+shows both arms together (positive and negative symptoms at once). Only bipolar
+separates them in time. A single channel's g is necessarily just high or low; the
+co-occurrence is in the multi-channel integration view. One update rule, run with
+different knobs:
 
     dg_i/dt = ( -g_i + S( beta*(g_i - 0.5) + I - ka*(a - 0.5)
                           + c*(mean(g) - g_i) + noise_i ) ) / tau_g
@@ -910,7 +915,10 @@ def cmd_guide(args):
     print("  g   the allocator's net gain on relevance, in (0,1). This is the one")
     print("      moving part. high g = flooding arm (grips too hard, world too loud);")
     print("      low g = collapse arm (lets go, world goes flat). The two arms are")
-    print("      two readings of one variable, not two faults.")
+    print("      one fault, not two: a raised bar over-weights some channels while")
+    print("      starving others at once, so a real field shows both together")
+    print("      (only bipolar separates them in time). One channel's g is just")
+    print("      high or low; the co-occurrence is in the integration view.")
     print("  S   the logistic squash. Its slope at the center is 0.25, which is why")
     print("      beta=4 (where beta*0.25 = 1) is the tipping point.")
     print("  a   'the bar': the relevance level the homeostat demands before it admits")
