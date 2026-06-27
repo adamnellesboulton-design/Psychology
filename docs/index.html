@@ -837,14 +837,14 @@ function viewCondense(){
     "largest coalition's share",
     [{label:"concentration", xs:alphas, ys:conc}],
     {hlines:[{y:0.5, label:"half the mass in one", color:"#888"}],
-     notes: crit!=null ? [{x:crit, y:0.5, text:"condensation", color:"#b0282d", anchor:"start"}] : []});
+     notes: crit!=null ? [{x:crit, y:0.66, text:"condensation", color:"#b0282d", anchor:"middle"}] : []});
   var lo = preferentialAttachment(n,0.7,steps,mulberry32(1));
   var hi = preferentialAttachment(n,1.6,steps,mulberry32(1));
   var ranks = []; for(var i=0;i<n;i++) ranks.push(i+1);
   var svg2 = svgLines("The mass across coalitions (ranked largest first)",
     "coalition rank", "share of the mass",
-    [{label:"fluid (low gain)", xs:ranks, ys:lo, color:"#2ca02c"},
-     {label:"condensed (high gain)", xs:ranks, ys:hi, color:"#d62728"}], {markers:true});
+    [{label:"fluid", xs:ranks, ys:lo, color:"#2ca02c"},
+     {label:"condensed", xs:ranks, ys:hi, color:"#d62728"}], {markers:true});
   var body = "A module is not an atom: it is a coalition of sub-units, and a sub-unit "
     + "does better attached to a coalition that wins the channel often. So sub-units "
     + "flow toward standing, and how steeply standing rises with a coalition's size -- "
