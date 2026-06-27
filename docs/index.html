@@ -409,7 +409,13 @@ function viewFp(p){
   return {svgs:[svg], title:"Where the mind settles", body:body};
 }
 
+// Sweep ignores the stressor and reads only beta (VIEW_USES pins ka=0), and each
+// settle is deterministic, so its result is a pure function of beta. It is the
+// heaviest view, so we memoize it by beta: stressor drags and knob edits that do
+// not touch beta then reuse it instead of recomputing 322 settles.
+var sweepCache = {beta: null, val: null};
 function viewSweep(p){
+  if(sweepCache.beta === p.beta) return sweepCache.val;
   var Imax=4.0, nPts=161;
   var ups = linspace(-Imax, Imax, nPts), downs = ups.slice().reverse();
   var g = settle(p, ups[0], 0.02), gUp=[], gDown=[];
@@ -434,7 +440,8 @@ function viewSweep(p){
       + "no memory of where it has been. Nothing latches. This is what a steady "
       + "mind does -- and what a fixed trait (ADHD, autism) does too: it tracks the "
       + "situation and never sticks.";
-  return {svgs:[svg], title:"Why a trigger sticks", body:body};
+  sweepCache = {beta: p.beta, val: {svgs:[svg], title:"Why a trigger sticks", body:body}};
+  return sweepCache.val;
 }
 
 // Recover ignores the knobs (it sweeps beta itself), so its output is constant
