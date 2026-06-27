@@ -658,16 +658,16 @@ function viewIntegration(p){
   var half = Math.floor(r.g.length/2), spreads=[];
   for(var s=half;s<r.g.length;s++) spreads.push(pstdev(r.g[s]));
   var coherent = mean(spreads) < 0.1;
+  // Within a coherent field, is the shared level steady (baseline) or swinging
+  // (bipolar)? Read the range of the field mean over the back half.
+  var meanField = r.g.map(function(row){ return mean(row); }).slice(half);
+  var swinging = (Math.max.apply(null, meanField) - Math.min.apply(null, meanField)) > 0.3;
   var wide = downsample(r.g, 240), mat = [];
   for(var ch=0;ch<n;ch++){ mat.push(wide.map(function(row){ return row[ch]; })); }
   var svg = svgHeatmap("Streams of experience over time (bright = flooded, dark = flat)", mat);
-  var body = coherent
-    ? "Each row is a different stream of experience -- a sense, a train of "
-      + "thought. Here they all move together as one: a single mood or tone laid "
-      + "over everything, swinging and returning as a whole. Even as it swings, "
-      + "the mind stays one integrated thing. That is the bipolar picture -- the "
-      + "level is unstable, but the mind is still whole."
-    : "Each row is a different stream of experience -- a sense, a train of "
+  var body;
+  if(!coherent)
+    body = "Each row is a different stream of experience -- a sense, a train of "
       + "thought. Here they come apart, each settling into its own state and "
       + "staying there, with nothing tying them into a single whole. The bright "
       + "rows are the flooding arm (over-weighted, salience landing everywhere -- "
@@ -676,6 +676,19 @@ function viewIntegration(p){
       + "arms together, not a mind that is simply flooded or simply blank. No "
       + "shared mood, no one coherent mind -- the binding has failed, and unlike a "
       + "mood swing it does not knit back together on its own.";
+  else if(swinging)
+    body = "Each row is a different stream of experience -- a sense, a train of "
+      + "thought. Here they all move together as one: a single mood or tone laid "
+      + "over everything, swinging and returning as a whole. Even as it swings, "
+      + "the mind stays one integrated thing. That is the bipolar picture -- the "
+      + "level is unstable, but the mind is still whole.";
+  else
+    body = "Each row is a different stream of experience -- a sense, a train of "
+      + "thought. Here they all move together as one, holding near a steady shared "
+      + "middle: a single calm field, not twelve separate states. The faint flicker "
+      + "is each module feeling the random stressor on its own, but the binding "
+      + "keeps them moving together. This is the healthy picture -- one integrated "
+      + "mind, resting where it should.";
   return {svgs:[svg], title:"One mind, or many?", body:body};
 }
 
