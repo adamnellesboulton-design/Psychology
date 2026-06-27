@@ -144,13 +144,20 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
       <h4>Miscalibration profiles <span class="note">&nbsp; (stable loop, &beta; small; the fault is a fixed setting)</span></h4>
       <div class="eq">ADHD: &nbsp; <i>v</i>(<i>d</i>) = 1 / (1 + <i>k&#8201;d</i>) <span class="note">&nbsp;&mdash; value of a reward at delay <i>d</i>; weight = the resting <i>g</i> it drives</span></div>
       <div class="eq">autism: &nbsp; mismatch = <i>g</i> &minus; <i>g</i>*, &nbsp; the realized gain tracks the optimum <i>g</i>* by a fraction &lambda; (&lambda; = 1 cancels it)</div>
+
+      <h4>Part two: the coalition layer <span class="note">&nbsp; (recruitment beneath the module)</span></h4>
+      <p>A module is a coalition of sub-units; its CONCENTRATION &phi; is the largest coalition's share of the mass. Recruitment runs the same fold one level down, with the recruitment gain &gamma; in place of the loop gain:</p>
+      <div class="eq">&phi;&#8202;&prime; = S&#8201;&#40;&#8201;&gamma;(&phi; &minus; &frac12;) + <i>b</i>&#8201;&#41; <span class="note">&nbsp; b = bias toward one coalition</span></div>
+      <p>&gamma; &lt; 4 leaves the layer fluid (mass spread, health); &gamma; &gt; 4 is bistable, a first-order condensation onto one coalition (capture/monopoly) whose hysteresis in <i>b</i> is relapse -- a cusp in (&gamma;, <i>b</i>). Continuous (proportional) recruitment would slide on and off with no gap; relapse is the signature of bandwagon (coordination) recruitment. The distribution side is preferential attachment: mass joins coalition <i>i</i> with probability &prop; (mass<sub>i</sub>)<sup>&alpha;</sup>, condensing for &alpha; &gt; 1. The phase diagram plots condensation (&gamma;) against integration (<i>c</i>): capture, fragmentation, health.</p>
+      <p class="note">Part three (what fit answers to -- grounding fit in the serial bottleneck, the discount rate as its horizon, and the for-me-ness/self-model floor) is the theory's grounding, not new mechanics, and is not modelled here; see the README.</p>
     </div>
   </div>
 </div>
 <footer>
   A deliberately simple toy for the theory, not a fit to data. Under the hood it is one
   equation run with different settings; for the dynamicists, the two malfunctions are a fold
-  (schizophrenia) and a Hopf bifurcation (bipolar).
+  (schizophrenia) and a Hopf bifurcation (bipolar), and part two runs that fold one level
+  down as the condensation of a recruitment contest.
 </footer>
 <script>
 "use strict";

@@ -110,6 +110,10 @@ bipolar crosses a bifurcation.
     python allocator_toy.py profile --preset adhd     # weight vs reward delay, two arms
     python allocator_toy.py profile --preset autism   # gain mismatch vs volatility, two arms
 
+    python allocator_toy.py condense                  # part two: recruitment gain vs concentration
+    python allocator_toy.py relapse                   # part two: recruitment hysteresis (relapse)
+    python allocator_toy.py phases                    # part two: the phase diagram
+
 Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. The
 environmental stressor is `--I` (a steady push) with `--stress-jitter` (a per-tick
 random wobble) and `--stress-lean` (bias the wobble: +1 up/more gain, -1 down/less
@@ -130,7 +134,9 @@ fragmenting, mania and depression) rather than the numbers, and each condition s
 the views that tell its story honestly -- a malfunction shows its dynamics, a
 miscalibration leads with its fixed profile and shows the (normal) dynamics after as
 contrast. Bipolar omits the hysteresis sweep on purpose, since that stickiness is the
-fold's, not the Hopf's. A "randomness" toggle (on by default) keeps a little noise
+fold's, not the Hopf's. A second button group, "Part two -- the coalition layer",
+swaps the dashboard to the recruitment layer's three lenses (Condensation, Relapse,
+Phase map), tagged with their own "the coalition layer" scope. A "randomness" toggle (on by default) keeps a little noise
 riding on every run so the dynamics look lifelike rather than suspiciously clean,
 and an environmental-stressor control (a steady push, with a per-tick random wobble
 on a little by default, and a lean that biases that wobble up or down) can be added
@@ -220,6 +226,65 @@ the hosted site needs none.
   pushes the calm field up toward flooding and makes the push wobble tick to tick. Lean
   on a malfunction (`series --preset schizophrenia --I -2`) and watch which basin it
   prefers.
+
+## Part two: the coalition layer (recruitment beneath the module)
+
+Part one took the roster of modules as given. But a module is itself a coalition of
+sub-units, and a sub-unit does better attached to a coalition that holds the channel
+often, so sub-units flow toward standing (won access). How steeply a coalition's
+standing rises with its mass is the RECRUITMENT GAIN, and it decides the layer:
+
+- subcritical (sublinear / proportional): mass stays fluid, spread across many
+  coalitions -- a plural field, which is health.
+- supercritical (superlinear): mass condenses onto one coalition -- capture, the
+  monopoly part one had to posit, here derived as the condensed phase of a dynamics
+  (the Bose-Einstein condensation of the fitness-network literature).
+
+The order parameter is CONCENTRATION, the largest coalition's share. When recruitment
+is a BANDWAGON (joining pays more the more have already joined -- a coordination / stag
+hunt one level down), the condensation is first-order: bistable and hysteretic, a fold
+whose hysteresis is relapse. So relapse is the signature of bandwagon recruitment, and
+a capture that came on gradually and reversed gradually would be evidence against it.
+That bandwagon fold is the bidding fold of part one run one level down, which is why
+the code reuses the same machinery (`condense` reuses `settle`).
+
+Part one is the adiabatic limit of part two: hold the slow memberships fixed and the
+fast bidding is exactly the fixed-roster contest of part one. Two axes -- the
+recruitment gain and the integrating coupling -- turn part one's three settling shapes
+into one phase diagram: capture (high gain), fragmentation (low integration), and the
+health wedge between. See `condense`, `relapse`, `phases`, and the app's "Part two"
+button group. This layer refines the capture axis (the fold) and leaves the homeostat's
+Hopf (bipolar) where part one found it.
+
+## Part three: what fit answers to (grounding, not new mechanics)
+
+Part three is the theory's floor rather than its machinery, and the toy stays out of
+it on purpose -- it demonstrates mechanics, and these are grounding and hard-problem
+questions the paper itself names and leaves open. It is recorded here so the model and
+the paper stay in step, with one mechanism-touching prediction called out.
+
+- Fit is grounded in the serial bottleneck: a bid is fit to the degree it serves the
+  organism's stream of next actions against a returning world. Correspondence is not a
+  second primitive but what serving-the-action converges to once the action is iterated
+  against a persistent world, so the information-gain (epistemic) term part one reached
+  for from active inference is now derived from the bottleneck rather than imported.
+- The discount rate is the horizon. Fit is scored against the undiscounted survival
+  stream; the discount rate (`k`, the ADHD setting) is the organism's tractable,
+  finite-window estimate of that infinite horizon. This is the one model-touching
+  point: because the epistemic term is a future payoff, a steep discount weights it
+  weakly and so weakens the built-in guard against capture -- a SECOND route (besides
+  the shrunken cooperative basin) by which steep discounting raises psychosis risk,
+  the same direction the ADHD->schizophrenia Mendelian-randomization result supports.
+  The toy shows the basin route (the comorbidity overlay above); it does not separately
+  simulate the discounted-epistemic-term route, because it does not model the epistemic
+  term explicitly.
+- For-me-ness and the self-model are the open floor. The bottleneck supplies a referent
+  for whom the contest runs (the organism that must persist) and a reason to model it
+  (interoceptive inference, the body predicting its own viability), and gives the
+  phenomenologists' minimal-self disturbance a seat distinct from the integration fold.
+  But it grounds functional mineness, not the felt kind; how a system that sees only
+  salience gets purchase on the world -- and on the feel -- is named and not closed.
+  The toy models none of this, by design.
 
 ## Files
 

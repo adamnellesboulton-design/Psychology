@@ -61,6 +61,14 @@ bistable and hysteretic, so capture relapses. Part one is the adiabatic limit of
 this (hold the slow memberships fixed; the fast bidding is the contest above). See
 condense / relapse / phases, and "The Coalition Beneath the Module".
 
+PART THREE (what fit answers to) is the theory's grounding, not new mechanics, and
+is not modelled here: fit grounds in the serial bottleneck (the organism's stream
+of next actions against a returning world), the discount rate k is the tractable
+horizon over which it is scored (so a steep discount weakens the future epistemic
+guard against capture -- a second route to ADHD-raised psychosis risk), and the
+self-model / for-me-ness is the open floor. The toy demonstrates mechanics; that
+grounding stays in the paper. See the README.
+
 House rules if Claude Code edits this:
 - ASCII only. No em or en dashes, no curly quotes, no unicode math or block
   glyphs. Use straight quotes and the ASCII intensity ramp in RAMP.
@@ -1214,6 +1222,12 @@ def cmd_guide(args):
     print("that condensation a first-order fold -- bistable, hysteretic -- so capture relapses;")
     print("relapse is the signature of bandwagon recruitment. Part one is the adiabatic limit:")
     print("hold the slow memberships fixed and the fast bidding is exactly the contest above.")
+    print()
+    print("PART THREE (what fit answers to) is grounding, not mechanics, and is not simulated:")
+    print("fit grounds in the serial bottleneck (the stream of next acts against a returning")
+    print("world); the discount rate k is its tractable horizon, so a steep discount weakens the")
+    print("future epistemic guard against capture -- a second route to ADHD-raised psychosis risk.")
+    print("The self-model / for-me-ness is the open floor. The toy stays with the mechanics.")
     print()
     print("Output is ASCII sparklines and heatmaps by default, so it runs in a bare")
     print("terminal. Nothing to install: pure standard library, and --plot writes SVG.")
