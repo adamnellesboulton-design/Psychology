@@ -65,8 +65,9 @@ PART THREE (what fit answers to) is the theory's grounding, not new mechanics, a
 is not modelled here: fit grounds in the serial bottleneck (the organism's stream
 of next actions against a returning world), the discount rate k is the tractable
 horizon over which it is scored (so a steep discount weakens the future epistemic
-guard against capture -- a second route to ADHD-raised psychosis risk), and the
-self-model / for-me-ness is the open floor. The toy demonstrates mechanics; that
+guard against capture -- a second route to ADHD-raised psychosis risk), the proxy
+gap is dissolved from below (percepts are bids bred toward correspondence by the
+same returns), and only the feel is left open. The toy demonstrates mechanics; that
 grounding stays in the paper. See the README.
 
 House rules if Claude Code edits this:
@@ -914,11 +915,11 @@ def cmd_relapse(args):
 
 
 def cmd_phases(args):
-    """The phase diagram. Two axes -- the recruitment gain that drives
-    condensation, and the integrating coupling that holds the shared state up --
-    turn part one's three settling shapes into three phases. Capture
-    (condensation) is high gain; fragmentation (anarchy) is low integration;
-    health is the wedge where the gain is subcritical and integration holds."""
+    """Capture against integration. The recruitment layer derives one boundary,
+    capture (condensation onto one coalition, high recruitment gain). It is crossed
+    here with part one's integration axis -- whose failure is fragmentation, which
+    recruitment does NOT derive -- only to place capture against it; health is the
+    corner where the gain is subcritical and integration holds."""
     gains = linspace(1.0, 8.0, 30)
     cs = linspace(0.0, 3.0, 13)
     kappa = [condense(g, 0.0, phi0=0.9) for g in gains]     # condensed fraction
@@ -930,8 +931,8 @@ def cmd_phases(args):
         half = len(g) // 2
         sigma.append(mean([pstdev(g[s]) for s in range(half, len(g))]))
 
-    print("phase diagram: recruitment gain (across) vs integration (up)")
-    print("  C capture (condensed)   F fragmentation (anarchy)   . health")
+    print("capture against integration: recruitment gain (across) vs integration (up)")
+    print("  C capture (condensed; recruitment's to derive)   F fragmentation   . health")
     for yi in range(len(cs) - 1, -1, -1):
         row = []
         for xi in range(len(gains)):
@@ -1203,7 +1204,7 @@ def cmd_guide(args):
     print("PART TWO -- the coalition layer (recruitment beneath the module):")
     print("  condense      recruitment gain vs concentration: fluid -> condensed (monopoly)")
     print("  relapse       recruitment hysteresis: bandwagon recruitment makes capture relapse")
-    print("  phases        phase diagram: recruitment gain vs integration -> the three shapes")
+    print("  phases        capture against integration (recruitment derives the capture boundary)")
     print()
     print("MALFUNCTION  = a slow control loses stability. The integrating gain folds")
     print("               (schizophrenia: fragments); the homeostat crosses a Hopf")
@@ -1227,7 +1228,8 @@ def cmd_guide(args):
     print("fit grounds in the serial bottleneck (the stream of next acts against a returning")
     print("world); the discount rate k is its tractable horizon, so a steep discount weakens the")
     print("future epistemic guard against capture -- a second route to ADHD-raised psychosis risk.")
-    print("The self-model / for-me-ness is the open floor. The toy stays with the mechanics.")
+    print("The proxy gap is dissolved from below (percepts are bids bred toward correspondence);")
+    print("only the feel is left open. The toy stays with the mechanics.")
     print()
     print("Output is ASCII sparklines and heatmaps by default, so it runs in a bare")
     print("terminal. Nothing to install: pure standard library, and --plot writes SVG.")

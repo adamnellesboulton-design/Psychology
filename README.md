@@ -112,7 +112,7 @@ bipolar crosses a bifurcation.
 
     python allocator_toy.py condense                  # part two: recruitment gain vs concentration
     python allocator_toy.py relapse                   # part two: recruitment hysteresis (relapse)
-    python allocator_toy.py phases                    # part two: the phase diagram
+    python allocator_toy.py phases                    # part two: capture against integration
 
 Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. The
 environmental stressor is `--I` (a steady push) with `--stress-jitter` (a per-tick
@@ -249,12 +249,26 @@ That bandwagon fold is the bidding fold of part one run one level down, which is
 the code reuses the same machinery (`condense` reuses `settle`).
 
 Part one is the adiabatic limit of part two: hold the slow memberships fixed and the
-fast bidding is exactly the fixed-roster contest of part one. Two axes -- the
-recruitment gain and the integrating coupling -- turn part one's three settling shapes
-into one phase diagram: capture (high gain), fragmentation (low integration), and the
-health wedge between. See `condense`, `relapse`, `phases`, and the app's "Part two"
-button group. This layer refines the capture axis (the fold) and leaves the homeostat's
-Hopf (bipolar) where part one found it.
+fast bidding is exactly the fixed-roster contest of part one (recovered only when
+recruitment separates in timescale from bidding and grows by a bandwagon -- both
+empirical bets). The multilevel selection here is the bookkeeping sense (a partition of
+change into within- and between-coalition parts), not a claim that coalitions are
+selected as units; every flow is driven by sub-unit reward.
+
+This slice is deliberately narrow -- it derives the two things part one posited (the
+monopoly and the fold) and no more. In particular it does NOT derive anarchy: capture
+is a condensation onto one coalition (the recruitment gain's fold), while fragmentation
+is part one's integration failure, a separate axis the recruitment slice does not
+account for. The `phases` view crosses the two for orientation -- recruitment gain
+(capture) against integrating coupling (fragmentation), with health where the gain is
+subcritical and integration holds -- but only the capture boundary is recruitment's to
+draw. The layer refines the capture axis (the fold) and leaves the homeostat's Hopf
+(bipolar) where part one found it. Where the derivation touches the predictions it
+sharpens them: the slow variable driven to the fold is the dominant coalition's mass,
+so critical slowing should show in concentration specifically, and because the fold is
+recovered as a first-order condensation, capture should set in and release abruptly
+(hysteresis) rather than continuously. See `condense`, `relapse`, `phases`, and the
+app's "Part two" button group.
 
 ## Part three: what fit answers to (grounding, not new mechanics)
 
@@ -267,7 +281,8 @@ the paper stay in step, with one mechanism-touching prediction called out.
   organism's stream of next actions against a returning world. Correspondence is not a
   second primitive but what serving-the-action converges to once the action is iterated
   against a persistent world, so the information-gain (epistemic) term part one reached
-  for from active inference is now derived from the bottleneck rather than imported.
+  for from active inference is now derived from the bottleneck rather than imported --
+  and that borrowed-objective debt is retired.
 - The discount rate is the horizon. Fit is scored against the undiscounted survival
   stream; the discount rate (`k`, the ADHD setting) is the organism's tractable,
   finite-window estimate of that infinite horizon. This is the one model-touching
@@ -278,13 +293,15 @@ the paper stay in step, with one mechanism-touching prediction called out.
   The toy shows the basin route (the comorbidity overlay above); it does not separately
   simulate the discounted-epistemic-term route, because it does not model the epistemic
   term explicitly.
-- For-me-ness and the self-model are the open floor. The bottleneck supplies a referent
-  for whom the contest runs (the organism that must persist) and a reason to model it
-  (interoceptive inference, the body predicting its own viability), and gives the
-  phenomenologists' minimal-self disturbance a seat distinct from the integration fold.
-  But it grounds functional mineness, not the felt kind; how a system that sees only
-  salience gets purchase on the world -- and on the feel -- is named and not closed.
-  The toy models none of this, by design.
+- The proxy gap is dissolved, not relocated. The old worry -- that a machine paid in
+  salience can never reach the world it is scored against -- is answered from below: a
+  percept is itself a bid beneath the action selector, bred toward correspondence by the
+  same reinforcement against the returns that breeds every bid toward fit, so the world
+  enters at the one loop where it is not a proxy. No privileged variable has to see the
+  world, and nothing regresses. The one thing left open is why any of it is FELT -- if a
+  feel attaches anywhere it is at the body's model of its own viability (interoceptive
+  inference), but whether and why it is felt is marked, not answered. The toy models
+  none of the grounding or the feel, by design.
 
 ## Files
 

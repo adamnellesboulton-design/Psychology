@@ -148,8 +148,8 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
       <h4>Part two: the coalition layer <span class="note">&nbsp; (recruitment beneath the module)</span></h4>
       <p>A module is a coalition of sub-units; its CONCENTRATION &phi; is the largest coalition's share of the mass. Recruitment runs the same fold one level down, with the recruitment gain &gamma; in place of the loop gain:</p>
       <div class="eq">&phi;&#8202;&prime; = S&#8201;&#40;&#8201;&gamma;(&phi; &minus; &frac12;) + <i>b</i>&#8201;&#41; <span class="note">&nbsp; b = bias toward one coalition</span></div>
-      <p>&gamma; &lt; 4 leaves the layer fluid (mass spread, health); &gamma; &gt; 4 is bistable, a first-order condensation onto one coalition (capture/monopoly) whose hysteresis in <i>b</i> is relapse -- a cusp in (&gamma;, <i>b</i>). Continuous (proportional) recruitment would slide on and off with no gap; relapse is the signature of bandwagon (coordination) recruitment. The distribution side is preferential attachment: mass joins coalition <i>i</i> with probability &prop; (mass<sub>i</sub>)<sup>&alpha;</sup>, condensing for &alpha; &gt; 1. The phase diagram plots condensation (&gamma;) against integration (<i>c</i>): capture, fragmentation, health.</p>
-      <p class="note">Part three (what fit answers to -- grounding fit in the serial bottleneck, the discount rate as its horizon, and the for-me-ness/self-model floor) is the theory's grounding, not new mechanics, and is not modelled here; see the README.</p>
+      <p>&gamma; &lt; 4 leaves the layer fluid (mass spread, health); &gamma; &gt; 4 is bistable, a first-order condensation onto one coalition (capture/monopoly) whose hysteresis in <i>b</i> is relapse -- a cusp in (&gamma;, <i>b</i>). Continuous (proportional) recruitment would slide on and off with no gap; relapse is the signature of bandwagon (coordination) recruitment. The distribution side is preferential attachment: mass joins coalition <i>i</i> with probability &prop; (mass<sub>i</sub>)<sup>&alpha;</sup>, condensing for &alpha; &gt; 1. This slice derives the capture/condensation only; the phase view crosses it against integration (<i>c</i>) for orientation, where fragmentation is part one's axis, not recruitment's.</p>
+      <p class="note">Part three (what fit answers to) is grounding, not new mechanics, and is not modelled here: fit grounds in the serial bottleneck, the discount rate is its horizon (a steep discount weakens the future guard against capture), the proxy gap is dissolved from below (percepts are bids bred toward correspondence), and only the feel is left open. See the README.</p>
     </div>
   </div>
 </div>
@@ -909,18 +909,19 @@ function viewPhases(){
     }
     grid.push(row);
   }
-  var svg = svgPhaseMap("The three shapes as one phase diagram",
+  var svg = svgPhaseMap("Capture against integration",
     "recruitment gain (drives condensation)", "integration (holds the field)",
     gains, cs, grid);
-  var body = "The first layer named three shapes -- health, fragmentation, monopoly -- and "
-    + "listed them. Two axes turn them into one phase diagram. Across: the recruitment gain "
-    + "that drives condensation. Up: the integrating coupling that holds the shared state. "
-    + "Capture (red) is the high-gain phase, one coalition condensing the mass, whatever the "
-    + "coupling. Fragmentation (purple) is the low-integration phase, the field coming apart "
-    + "with no shared state to coordinate it -- anarchy. Health (green) is the wedge between: "
-    + "subcritical gain and integration intact, the field plural and yet coherent. The two "
-    + "pathologies stop being two posits and become two ways off one plateau.";
-  return {svgs:[svg], title:"One plateau, two ways off", body:body};
+  var body = "What this layer actually derives is one boundary: capture (red), the high-gain "
+    + "phase where one coalition condenses the mass, the monopoly part one had to posit. That "
+    + "is recruitment's to draw. The other axis is part one's, not this layer's: when the "
+    + "integrating coupling is too weak the field comes apart -- fragmentation (purple), "
+    + "anarchy -- which the recruitment slice does NOT derive, shown here only to place capture "
+    + "against it. Health (green) is the corner where the gain is subcritical and integration "
+    + "holds, the field plural and yet coherent. So read this as orientation, not as three "
+    + "phases all falling out of recruitment: the fold is the layer's result, the coming-apart "
+    + "is part one's, and the swing (bipolar's Hopf) sits on neither axis here.";
+  return {svgs:[svg], title:"Capture against integration", body:body};
 }
 
 var RUNNERS = {
@@ -1050,9 +1051,10 @@ var CONDITION_INTROS = {
   p2_relapse: "<strong>Part two: relapse.</strong> The fold part one assigns to capture "
     + "survives this layer only if recruitment is a bandwagon (joining pays more the more "
     + "have joined). Then condensation is first-order and hysteretic -- which is what relapse is.",
-  p2_phases: "<strong>Part two: the phase diagram.</strong> Recruitment gain and integration "
-    + "are two axes, and part one's three settling shapes become three phases on them -- "
-    + "capture, fragmentation, and the health wedge between."
+  p2_phases: "<strong>Part two: capture against integration.</strong> The recruitment layer "
+    + "derives one boundary -- capture, the condensation onto one coalition. Crossed here with "
+    + "part one's integration axis (whose failure is fragmentation, which recruitment does not "
+    + "derive) for orientation, with health where the gain is subcritical and integration holds."
 };
 
 var state = Object.assign({}, DEF);
