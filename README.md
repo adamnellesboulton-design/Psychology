@@ -20,23 +20,32 @@ update rule run with different knobs:
 
     dg_i/dt = ( -g_i + S( beta*(g_i - 0.5) + I - ka*(a - 0.5)
                           + c*(mean(g) - g_i) + noise_i ) ) / tau_g
-    da/dt   = ( mean(g) - a ) / tau_a          # slow; only the oscillator uses it
+    da/dt   = ( mean(g) - a ) / tau_a          # slow; the bar, engaged everywhere
 
 `S` is the logistic squash. `i` indexes channels (1 by default; 12 for the
-integration experiment).
+integration experiment). `I` is the environmental stressor (a steady push, with
+an optional per-tick jitter); `noise_i` is the model's own noise. The homeostat
+is engaged in every condition, so the bar `a` moves throughout; only bipolar
+crosses its Hopf into a sustained swing.
 
 ## The knobs, and what each one is in the paper
 
     beta   self-reinforcement / loop gain. The recurrent term beta*(g-0.5) is
            positive feedback: winning begets winning. It is the engine behind both
-           bifurcations. With the homeostat off, beta>4 folds the loop into two
-           basins; beta=4 is that fold.
-    I      external drive: stress, a salient input, a dopaminergic fluctuation.
+           bifurcations. The homeostat opposes it, so the loop folds when the
+           effective gain beta-ka passes 4 (with the homeostat off, that is just
+           beta>4); beta-ka=4 is that fold.
+    I      ENVIRONMENTAL STRESSOR: a steady push from outside (stress, a salient
+           input, a dopaminergic shift), with an optional per-tick jitter that
+           adds a fresh uniform draw each step so the push fluctuates. It drives
+           the time-series and field views; can be added to any condition.
     ka     HOMEOSTAT strength. The homeostat sets the bar (the slow variable a:
            the level of relevance a bid must clear) and opposes the loop, so the
            effective gain is beta-ka. It keeps a single euthymic resting state
            rather than two basins, but past its HOPF that state loses its damping
-           and the field orbits euthymia -- the bipolar swing.
+           and the field orbits euthymia -- the bipolar swing. It is engaged in
+           every condition, so the bar moves throughout; only bipolar's ka is
+           strong enough to cross the Hopf.
     c      INTEGRATING gain / coupling across channels: the binding of the field
            into one coherent state. High c keeps the field one thing; low c lets
            the channels fall into different basins. Its FOLD is schizophrenia.
@@ -61,12 +70,18 @@ lengthening as the damping dies.
 
 ## The four conditions as presets
 
-    preset          regime                              knobs              signature
-    baseline        rests at euthymia                   beta=2             slides, recovers fast
-    schizophrenia   integrating gain folds              beta=8, c=0.2      fragments, no return
-    bipolar         homeostat crosses a Hopf            beta=8, c=3, ka=6  swings around euthymia
-    adhd            both controls intact, steep target  beta=2, k=0.95     two-armed over delay
-    autism          both controls intact, stuck target  beta=2, lam=0.1    two-armed over volatility
+    preset          regime                              knobs                 signature
+    baseline        rests at euthymia                   beta=2, ka=2          slides, recovers fast
+    schizophrenia   loop folds past the homeostat       beta=8, ka=2, c=0.2   fragments, no return
+    bipolar         homeostat crosses a Hopf            beta=8, ka=6, c=3      swings around euthymia
+    adhd            both controls intact, steep target  beta=2, ka=2, k=0.95  two-armed over delay
+    autism          both controls intact, stuck target  beta=2, ka=2, lam=0.1 two-armed over volatility
+
+The homeostat (ka) is engaged in every preset, so the bar moves in all of them;
+schizophrenia's loop is strong enough that even with the homeostat opposing it the
+effective gain stays past the fold (beta-ka = 6 > 4), while bipolar's is below it
+(beta-ka = 2 < 4) but its homeostat loses its damping and crosses the Hopf. Only
+bipolar crosses a bifurcation.
 
 ## Run it
 
@@ -87,9 +102,12 @@ lengthening as the damping dies.
     python allocator_toy.py profile --preset adhd     # weight vs reward delay, two arms
     python allocator_toy.py profile --preset autism   # gain mismatch vs volatility, two arms
 
-Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. By default the
-output is ASCII sparklines and heatmaps in the terminal. Add `--plot` to also write
-self-contained SVG files to `out/` (any browser opens them; no libraries needed).
+Any preset can be overridden: `--beta --c --ka --k --lam --adapt`. The
+environmental stressor is `--I` (a steady push) with `--stress-jitter` (a per-tick
+fluctuation); e.g. `series --preset baseline --I 1.5 --stress-jitter 0.5` shoves a
+calm field upward. By default the output is ASCII sparklines and heatmaps in the
+terminal. Add `--plot` to also write self-contained SVG files to `out/` (any
+browser opens them; no libraries needed).
 
 ## Browser UI
 
@@ -102,12 +120,15 @@ fragmenting, mania and depression) rather than the numbers, and each condition s
 the views that tell its story honestly -- a malfunction shows its dynamics, a
 miscalibration leads with its fixed profile and shows the (normal) dynamics after as
 contrast. Bipolar omits the hysteresis sweep on purpose, since that stickiness is the
-fold's, not the Hopf's. A collapsed "Adjust the dials yourself" panel exposes a
-slider for every knob for anyone who wants to drive the model by hand, and a "Show
-the math" button opens a typeset panel (real symbols -- Greek, subscripts, overdots,
-the Jacobian trace) with the full update rule, the parameters, and the bifurcation
-conditions (the fold at effective gain 4, the Hopf from the trace). It is hand-set
-HTML, no MathJax or KaTeX, so it still needs nothing. The captions read plainly
+fold's, not the Hopf's. A "randomness" toggle (on by default) keeps a little noise
+riding on every run so the dynamics look lifelike rather than suspiciously clean,
+and an environmental-stressor control (a steady push with optional per-tick jitter)
+can be added to any condition to shove the field around. A collapsed "Adjust the
+dials yourself" panel exposes a slider for every knob for anyone who wants to drive
+the model by hand, and a "Show the math" button opens a typeset panel (real symbols
+-- Greek, subscripts, overdots, the Jacobian trace) with the full update rule, the
+parameters, and the bifurcation conditions (the fold at effective gain 4, the Hopf
+from the trace). It is hand-set HTML, no MathJax or KaTeX, so it still needs nothing. The captions read plainly
 while the axes carry the symbols (g, I, beta, d, v, g*), so legibility and precision
 sit side by side. No build step and no dependencies.
 
@@ -141,11 +162,12 @@ the hosted site needs none.
 
 ## What the model is demonstrating (and what you should see)
 
-- `fp` reads the resting states off the effective gain (beta-ka). With the homeostat
-  off, beta=2 has a single euthymic state (it slides) and beta=8 has folded into two
-  basins at about 0.02 and 0.98 (schizophrenia). With the homeostat on (bipolar:
-  beta=8, ka=6), the effective gain is 2, so there is a single euthymic state again
-  -- but it has lost its damping, so the field orbits it (the Hopf).
+- `fp` reads the resting states off the effective gain (beta-ka). The baseline
+  (beta=2, ka=2, effective gain 0) has a single euthymic state (it slides); the
+  schizophrenia preset (beta=8, ka=2) still has an effective gain of 6, past the
+  fold, so it has folded into two basins at about 0.07 and 0.93. The bipolar preset
+  (beta=8, ka=6) brings the effective gain down to 2, so there is a single euthymic
+  state again -- but it has lost its damping, so the field orbits it (the Hopf).
 - Malfunction versus miscalibration shows up under a reversible sweep. At beta=8
   the drive-up and drive-down paths differ (hysteresis loop area about 2.1); at
   beta=2 they lie on top of each other (area ~ 0). The malfunction's state depends
@@ -183,6 +205,10 @@ the hosted site needs none.
   the slow variable is what makes a folded loop cycle rather than just snap.
 - Raise the noise in `series` and the bistable system switches arms more often. With
   the slow variable on, the same noise rides on top of a clean oscillation.
+- Add a stressor to any preset: `series --preset baseline --I 1.5 --stress-jitter 0.5`
+  pushes the calm field up toward flooding and makes the push wobble tick to tick. Lean
+  on a malfunction (`series --preset schizophrenia --I -2`) and watch which basin it
+  prefers.
 
 ## Files
 
