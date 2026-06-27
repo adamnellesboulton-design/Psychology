@@ -40,8 +40,14 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 #plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
 #dashboard{display:flex;flex-direction:column;gap:14px;}
 .dash-intro{background:#eef2ff;border:1px solid #dde3ff;border-radius:12px;padding:13px 18px;font-size:14px;line-height:1.55;color:#33333b;}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;border-left:4px solid #cdd6e6;}
+.card-field{border-left:4px solid #5bbd8e;background:#f6fbf8;}
 .card-title{font-size:15px;font-weight:700;margin-bottom:6px;}
+.scope{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:10px;margin-right:9px;vertical-align:middle;}
+.scope-one{background:#eef1f6;color:#5a6b86;}
+.scope-field{background:#dcf1e7;color:#1f7a52;}
+.scope-legend{font-size:12.5px;color:var(--muted);margin-top:9px;line-height:1.5;}
+.scope-legend .scope{margin-right:5px;}
 .card svg{max-width:100%;height:auto;display:block;margin:0 auto 4px;}
 .card-body{font-size:13.5px;line-height:1.55;color:#33333b;white-space:pre-wrap;margin-top:6px;}
 #advanced summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);outline:none;}
@@ -731,6 +737,15 @@ var VIEW_USES = {
   profile_adhd: ["k"], profile_autism: ["lam"]
 };
 
+// Whether a view reads a single channel (one bid's gain) or the whole field (all
+// channels at once). A single channel can only be high or low; the flooding and
+// collapse arms show together only across the field, which is the integration view.
+var VIEW_SCOPE = {
+  series: "one", fp: "one", sweep: "one", recover: "one",
+  profile_adhd: "one", profile_autism: "one",
+  integration: "field"
+};
+
 function runView(view, state){
   var uses = VIEW_USES[view] || [];
   var p = defaults();
@@ -887,13 +902,22 @@ function scheduleDash(){ if(dashTimer) clearTimeout(dashTimer); dashTimer = setT
 // The five conditions are fixed, so their dashboards are computed once and
 // cached; re-selecting one is then instant. Custom (dial edits) is never cached.
 var dashCache = {};
+var SCOPE_BADGE = {
+  one:   '<span class="scope scope-one">one channel</span>',
+  field: '<span class="scope scope-field">the whole field &middot; 12 channels</span>'
+};
 function buildDashHTML(){
-  var html = '<div class="dash-intro">' + (CONDITION_INTROS[cond] || CONDITION_INTROS.custom) + '</div>';
+  var html = '<div class="dash-intro">' + (CONDITION_INTROS[cond] || CONDITION_INTROS.custom)
+    + '<div class="scope-legend">Each chart is tagged ' + SCOPE_BADGE.one
+    + ' (a single bid\'s gain -- only ever high or low) or ' + SCOPE_BADGE.field
+    + ' (all channels at once, where the flooding and collapse arms show together).</div></div>';
   var views = CONDITION_VIEWS[cond] || CONDITION_VIEWS.custom;
   views.forEach(function(vk){
     var out;
     try { out = runView(vk, state); } catch(e){ return; }
-    html += '<div class="card"><div class="card-title">' + escapeHtml(out.title || "") + '</div>'
+    var scope = VIEW_SCOPE[vk] || "one";
+    html += '<div class="card card-' + scope + '"><div class="card-title">' + SCOPE_BADGE[scope]
+          + escapeHtml(out.title || "") + '</div>'
           + '<div>' + out.svgs.join("") + '</div>'
           + '<div class="card-body">' + escapeHtml(out.body || "") + '</div></div>';
   });
