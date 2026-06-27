@@ -185,21 +185,26 @@ function gaussFactory(seed){
 
 function defaults(){ return {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, adapt:1, noise:0, tau_g:1, tau_a:40, dt:0.05, seed:0}; }
 
-function simulate(p, T, n, driveFn, g0, a0, gauss){
+// drive is null or {base, wobble}: base is the steady stressor push, shared by
+// every module (a uniform outside pressure); wobble, if present, is drawn fresh
+// per module per step, so the stressor's randomness hits every module similarly
+// but independently rather than as one shared kick.
+function simulate(p, T, n, drive, g0, a0, gauss){
   var steps = Math.round(T/p.dt);
   var g;
   if(g0 == null){ g = []; for(var i=0;i<n;i++) g.push(0.5); }
   else if(Array.isArray(g0)){ g = g0.slice(); }
   else { g = []; for(var i=0;i<n;i++) g.push(g0); }
   var a = a0;
+  var base = drive ? drive.base : p.I, wob = drive ? drive.wobble : null;
   var outG = [], outA = [], t = [];
   for(var s=0;s<steps;s++){
     var now = s*p.dt;
-    var drv = driveFn ? driveFn(now) : p.I;
     var mg = mean(g);
     var ng = [];
     for(var i=0;i<n;i++){
-      var x = p.beta*(g[i]-0.5) + drv - p.ka*(a-0.5) + p.c*(mg-g[i]);
+      var x = p.beta*(g[i]-0.5) + base - p.ka*(a-0.5) + p.c*(mg-g[i]);
+      if(wob) x += wob();                 // per-module stressor wobble
       if(p.noise > 0) x += p.noise * gauss();
       ng.push(g[i] + p.dt*(-g[i] + S(x))/p.tau_g);
     }
@@ -412,17 +417,17 @@ function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
 
 // The environmental stressor as a drive(t): a steady push plus a fresh per-tick
 // fluctuation, the same value for every channel at a given tick. null = none.
-// The lean biases the random kicks: each tick the kick is upward with probability
-// (1+lean)/2, so lean > 0 pushes the field up (more gain), lean < 0 pushes it down
-// (less gain), lean = 0 is even. The kick's magnitude stays random.
+// Returns {base, wobble}: base is the steady push (shared by every module);
+// wobble (or null) is a fresh per-module random kick. The lean biases each kick:
+// it is upward with probability (1+lean)/2, so lean > 0 pushes the field up (more
+// gain), lean < 0 down (less gain), lean = 0 even. The kick's magnitude stays
+// random. Because wobble is called once per module, the stressor's randomness has
+// a similar but independent effect on every module rather than one shared kick.
 function stressDrive(){
   if(stress === 0 && stressJitter === 0) return null;
   var s = stress, j = stressJitter, pUp = (1 + stressLean)/2, rng = mulberry32(20240517);
-  if(j === 0) return function(){ return s; };
-  return function(){
-    var sign = (rng() < pUp) ? 1 : -1;
-    return s + sign * j * rng();
-  };
+  if(j === 0) return {base: s, wobble: null};
+  return {base: s, wobble: function(){ var sign = (rng() < pUp) ? 1 : -1; return sign * j * rng(); }};
 }
 
 // Each view returns {svgs, title, body}: a friendly heading and a plain-language

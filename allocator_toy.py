@@ -152,8 +152,10 @@ def simulate(p, T, n=1, drive=None, g0=None, a0=0.5, rng=None):
 
     Returns (t, g, a) where t is a list of times, g is a list of per-step lists
     (one entry per channel), and a is a list of the slow variable. drive, if
-    given, is a function of time returning the external drive I; otherwise the
-    constant p.I is used.
+    given, is a (base, wobble) pair: base is the steady stressor push shared by
+    every module, and wobble (or None) is drawn fresh per module per step, so the
+    stressor's randomness hits every module similarly but independently. When
+    drive is None the constant p.I is used.
     """
     steps = int(round(T / p.dt))
     if rng is None:
@@ -165,15 +167,18 @@ def simulate(p, T, n=1, drive=None, g0=None, a0=0.5, rng=None):
     else:
         g = [float(g0)] * n
     a = float(a0)
+    base = p.I if drive is None else drive[0]
+    wob = None if drive is None else drive[1]
 
     out_g, out_a, t = [], [], []
     for s in range(steps):
         now = s * p.dt
-        drv = p.I if drive is None else drive(now)
         mg = sum(g) / n
         new_g = []
         for gi in g:
-            x = p.beta * (gi - 0.5) + drv - p.ka * (a - 0.5) + p.c * (mg - gi)
+            x = p.beta * (gi - 0.5) + base - p.ka * (a - 0.5) + p.c * (mg - gi)
+            if wob is not None:
+                x += wob()                       # per-module stressor wobble
             if p.noise > 0.0:
                 x += p.noise * rng.gauss(0.0, 1.0)
             new_g.append(gi + p.dt * (-gi + S(x)) / p.tau_g)
@@ -187,22 +192,23 @@ def simulate(p, T, n=1, drive=None, g0=None, a0=0.5, rng=None):
 
 
 def stress_drive(p, rng):
-    """Build the environmental-stressor drive: a steady push p.I plus, if asked,
-    a per-tick random kick of size up to stress_jitter. The lean biases those
-    kicks: the kick is upward with probability (1+lean)/2, so lean > 0 pushes the
-    field up (more gain) and lean < 0 pushes it down (less gain), with lean = 0
-    even. Returns None when there is nothing to add, so simulate() uses the
-    constant p.I."""
+    """Build the environmental-stressor drive as a (base, wobble) pair. base is the
+    steady push p.I, shared by every module. wobble (or None) is a per-tick random
+    kick of size up to stress_jitter, drawn fresh per module so the stressor's
+    randomness affects every module similarly but independently. The lean biases
+    each kick: upward with probability (1+lean)/2, so lean > 0 pushes the field up
+    (more gain) and lean < 0 down (less gain), lean = 0 even. Returns None when
+    there is nothing to add, so simulate() uses the constant p.I."""
     if p.I == 0.0 and p.stress_jitter == 0.0:
         return None
     base, jit, p_up = p.I, p.stress_jitter, (1.0 + p.stress_lean) / 2.0
     if jit == 0.0:
-        return lambda now: base
+        return (base, None)
 
-    def drive(now):
+    def wobble():
         sign = 1.0 if rng.random() < p_up else -1.0
-        return base + sign * jit * rng.random()
-    return drive
+        return sign * jit * rng.random()
+    return (base, wobble)
 
 
 def settle(p, drive_value, g0, a0=0.5, T=80.0):
