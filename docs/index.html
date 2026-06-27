@@ -297,6 +297,11 @@ function svgLines(title, xlabel, ylabel, series, opts){
     var pts = f.points.map(function(p){ return X(p[0]).toFixed(2)+","+Y(p[1]).toFixed(2); }).join(" ");
     o.push('<polygon points="'+pts+'" fill="'+f.color+'" stroke="none"/>');
   });
+  // vertical shaded bands spanning the plot height (e.g. basins of attraction)
+  if(opts.vbands) opts.vbands.forEach(function(vb){
+    var bx0=X(vb.x0), bx1=X(vb.x1);
+    o.push('<rect x="'+Math.min(bx0,bx1).toFixed(1)+'" y="'+py1+'" width="'+Math.abs(bx1-bx0).toFixed(1)+'" height="'+(py0-py1).toFixed(1)+'" fill="'+vb.color+'"/>');
+  });
   o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
   o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px1+'" y2="'+py0+'" stroke="black"/>');
   o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px0+'" y2="'+py1+'" stroke="black"/>');
@@ -339,6 +344,18 @@ function svgLines(title, xlabel, ylabel, series, opts){
       o.push(arrowHead(x1, y1, Math.atan2(y1-y0, x1-x0), col));
     });
   });
+  // phase-line flow arrows near the axis: which way the state slides in a region
+  if(opts.flowArrows) opts.flowArrows.forEach(function(fa){
+    var ax=X(fa.x), ay=py0-13, fc=fa.color||"#777", dir=fa.dir>0?1:-1;
+    o.push('<line x1="'+(ax-dir*9).toFixed(1)+'" y1="'+ay+'" x2="'+(ax+dir*3).toFixed(1)+'" y2="'+ay+'" stroke="'+fc+'" stroke-width="2"/>');
+    o.push(arrowHead(ax+dir*9, ay, dir>0?0:Math.PI, fc));
+  });
+  // an orbit ring: a single point that is circled rather than settled into (Hopf)
+  if(opts.orbit){
+    var ox=X(opts.orbit.x), oy=Y(opts.orbit.y), orx=24, ory=46, oc=opts.orbit.color||"#d62728";
+    o.push('<ellipse cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" rx="'+orx+'" ry="'+ory+'" fill="none" stroke="'+oc+'" stroke-width="1.6" stroke-dasharray="5 4"/>');
+    o.push(arrowHead(ox, oy-ory, 0, oc));
+  }
   if(opts.points){
     opts.points.forEach(function(p){
       var col = p[2] ? "#2ca02c" : "#d62728";
@@ -415,34 +432,64 @@ function viewFp(p){
   var hopf = (fps.length === 1 && trace > 0);
   var grid = linspace(0,1,400);
   var curve = grid.map(function(g){ return S(ge*(g-0.5)); });
-  var svg = svgLines("Where the mind can settle",
-    "g  -  allocator state (0 collapsed, 1 flooded)", "next-step g",
-    [{label:"next state", xs:grid, ys:curve}, {label:"stays put", xs:grid, ys:grid}],
-    {points: fps.map(function(f){ return [f[0], f[0], f[1] && !hopf]; })});
+  function drift(g){ return S(ge*(g-0.5)) - g; }  // >0: state rises; <0: it falls
+
+  var opts = {points: fps.map(function(f){ return [f[0], f[0], f[1] && !hopf]; }), notes: []};
+  if(hopf){
+    var c0 = fps[0][0];
+    opts.orbit = {x:c0, y:c0, color:"#d62728"};
+    opts.notes.push({x: Math.min(0.62, c0+0.12), y:c0, text:"circles, never rests", color:"#b0282d", anchor:"start"});
+  } else {
+    // Shade each basin of attraction (split at the unstable points), tinted by the
+    // arm it leads to, and put a phase-line arrow in each region between fixed
+    // points showing which way the state slides. Arrows converge on the green
+    // resting places and run away from the red tipping point.
+    var unstable = fps.filter(function(f){ return !f[1]; }).map(function(f){ return f[0]; }).sort(function(a,b){return a-b;});
+    var bounds = [0].concat(unstable).concat([1]);
+    opts.vbands = [];
+    for(var b=0;b<bounds.length-1;b++){
+      var lo=bounds[b], hi=bounds[b+1], mid=(lo+hi)/2;
+      var tint = (mid < 0.45) ? "rgba(31,119,180,0.08)"
+               : (mid > 0.55 ? "rgba(255,127,14,0.08)" : "rgba(44,160,44,0.07)");
+      opts.vbands.push({x0:lo, x1:hi, color:tint});
+    }
+    var xs = fps.map(function(f){ return f[0]; }).slice().sort(function(a,b){return a-b;});
+    var rb = [0].concat(xs).concat([1]);
+    opts.flowArrows = [];
+    for(var k=0;k<rb.length-1;k++){
+      var m=(rb[k]+rb[k+1])/2, mx=Math.max(0.05, Math.min(0.95, m));
+      opts.flowArrows.push({x:mx, dir: drift(m)>0?1:-1});
+    }
+    if(unstable.length) opts.notes.push({x:unstable[0], y:0.82, text:"tipping point", color:"#b0282d"});
+  }
+
+  var svg = svgLines("Where the mind can settle, and which way it slides",
+    "g  -  the state  (0 collapsed, 1 flooded)", "where the next moment takes it",
+    [{label:"next-moment curve", xs:grid, ys:curve, color:"#1f77b4", width:2},
+     {label:"no-change line", xs:grid, ys:grid, color:"#bbb", width:1.2, dash:"4 3"}],
+    opts);
   var body;
   if(fps.length >= 2)
-    body = "Think of the curve as a landscape and the dots as the places the mind "
-      + "can come to rest. Right now there are two resting places and no steady "
-      + "middle: one where everything floods with meaning (the over-connected, "
-      + "urgent world of psychosis) and one where meaning drains away (flat, "
-      + "withdrawn) -- with only an unstable knife-edge between them (the red dot). "
-      + "Knocked off the edge, the mind drops into one trap and stays. This is the "
-      + "broken-integration picture of schizophrenia.";
+    body = "The shaded bands are the places the mind can come to rest, and the small "
+      + "arrows show which way it slides from wherever it starts. There are two "
+      + "basins and no steady middle: one where everything floods with meaning (the "
+      + "over-connected, urgent world of psychosis) and one where meaning drains "
+      + "away (flat, withdrawn), split by an unstable tipping point (the red dot). "
+      + "The arrows run away from that point -- nudged off it, the mind slides into "
+      + "one basin and stays. This is the broken-integration picture of schizophrenia.";
   else if(hopf)
-    body = "Think of this as the landscape of states the mind can rest in. Here "
-      + "there is just one resting place -- a normal, balanced middle -- because "
-      + "the regulator holds the mind to a single centre instead of letting it "
-      + "split in two. But that centre has gone unstable: rather than resting "
-      + "there, the system circles it, swinging out toward 'too much' and 'too "
-      + "little' and back through the middle. That is the bipolar pattern -- a "
-      + "regulator that has started to oscillate -- and there is still a real "
-      + "middle (euthymia) to return to between swings.";
+    body = "There is just one resting place here -- a single balanced middle -- "
+      + "because the regulator holds the mind to one centre instead of letting it "
+      + "split in two. But the red ring shows that centre has gone unstable: instead "
+      + "of settling there, the system circles it, swinging out toward 'too much' "
+      + "and 'too little' and back through the middle, again and again. That is the "
+      + "bipolar pattern, and there is still a real middle (euthymia) it passes "
+      + "through between swings.";
   else
-    body = "Think of this as the landscape of states the mind can rest in. There "
-      + "is a single, steady resting place in the middle: nudge the system and it "
-      + "settles back. It can lean a little toward 'too much' or 'too little', but "
-      + "it slides there gently -- no trap to fall into, no swing to get caught in. "
-      + "A regulator doing its job.";
+    body = "The shaded band is the whole landscape, and the arrows show the mind "
+      + "sliding toward the single resting place in the middle (the green dot) from "
+      + "wherever it starts. Nudge it and it slides back -- no trap to fall into, no "
+      + "swing to get caught in. A regulator doing its job.";
   return {svgs:[svg], title:"Where the mind settles", body:body};
 }
 
