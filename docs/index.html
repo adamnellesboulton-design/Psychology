@@ -659,9 +659,12 @@ function viewIntegration(p){
   for(var s=half;s<r.g.length;s++) spreads.push(pstdev(r.g[s]));
   var coherent = mean(spreads) < 0.1;
   // Within a coherent field, is the shared level steady (baseline) or swinging
-  // (bipolar)? Read the range of the field mean over the back half.
+  // (bipolar)? And if steady, does it rest near the middle (healthy) or has a
+  // strong stressor pinned the whole field together at one extreme (captured)?
   var meanField = r.g.map(function(row){ return mean(row); }).slice(half);
   var swinging = (Math.max.apply(null, meanField) - Math.min.apply(null, meanField)) > 0.3;
+  var fieldLevel = mean(meanField);
+  var pinned = !swinging && (fieldLevel > 0.65 || fieldLevel < 0.35);
   var wide = downsample(r.g, 240), mat = [];
   for(var ch=0;ch<n;ch++){ mat.push(wide.map(function(row){ return row[ch]; })); }
   var svg = svgHeatmap("Streams of experience over time (bright = flooded, dark = flat)", mat);
@@ -682,6 +685,14 @@ function viewIntegration(p){
       + "over everything, swinging and returning as a whole. Even as it swings, "
       + "the mind stays one integrated thing. That is the bipolar picture -- the "
       + "level is unstable, but the mind is still whole.";
+  else if(pinned)
+    body = "Each row is a different stream of experience -- a sense, a train of "
+      + "thought. They still move together as one, so the field is coherent -- but "
+      + "a strong outside stressor has driven the whole field into the same extreme, "
+      + (fieldLevel > 0.65 ? "every module flooded at once" : "every module gone quiet at once")
+      + " rather than resting at the middle. One field, but pinned at "
+      + (fieldLevel > 0.65 ? "flood" : "collapse") + " by the pressure, not where a "
+      + "healthy mind sits. Ease the stressor back and it settles toward the middle again.";
   else
     body = "Each row is a different stream of experience -- a sense, a train of "
       + "thought. Here they all move together as one, holding near a steady shared "
