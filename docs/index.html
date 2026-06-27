@@ -35,6 +35,7 @@ select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;fon
 .slider .val{font-size:12px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums;}
 input[type=range]{width:100%;accent-color:var(--accent);}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;}
+.group > label.check{text-transform:none;letter-spacing:0;font-weight:400;font-size:13px;margin-bottom:0;}
 #plots{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;min-height:120px;}
 #plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
 #dashboard{display:flex;flex-direction:column;gap:14px;}
@@ -80,6 +81,14 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
       <label>Condition</label>
       <div id="conditions" class="seg"></div>
     </div>
+    <div class="group">
+      <label class="check"><input type="checkbox" id="noisy" checked> add randomness <span style="color:var(--muted)">&nbsp;(more lifelike)</span></label>
+    </div>
+    <div class="group">
+      <label>Environmental stressor</label>
+      <div id="stressSliders"></div>
+      <p class="hint">A push from outside, with optional per-tick jitter -- drives the time-series and field views.</p>
+    </div>
     <details class="group" id="advanced">
       <summary>Adjust the dials yourself</summary>
       <div id="sliders"></div>
@@ -98,7 +107,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
     <p class="sub">One equation, run with different settings. Illustrative, not fitted to data.</p>
     <div id="mathBody">
       <h4>State</h4>
-      <p><i>g</i><sub>i</sub> &isin; (0,1): the gain on relevance in channel <i>i</i> &mdash; near 1 is flooding, near 0 is collapse, &frac12; is euthymia. &nbsp; <i>a</i> &isin; (0,1): the bar, a slow threshold each bid must clear.</p>
+      <p><i>g</i><sub>i</sub> &isin; (0,1): the gain on relevance in channel <i>i</i> &mdash; near 1 is flooding, near 0 is collapse, &frac12; is euthymia. &nbsp; <i>a</i> &isin; (0,1): the bar, a slow threshold each bid must clear &mdash; engaged in every condition, so it moves throughout; only bipolar crosses its Hopf.</p>
 
       <h4>Dynamics <span class="note">&nbsp; (overdot = d/d<i>t</i>; S(<i>x</i>) = 1/(1+e<sup>&minus;<i>x</i></sup>), S&prime;(0) = &frac14;)</span></h4>
       <div class="eq">&tau;<sub>g</sub>&#8201;&#x0121;<sub>i</sub> = &minus;<i>g</i><sub>i</sub> + S&#8201;&#40;&#8201;&beta;(<i>g</i><sub>i</sub>&minus;&frac12;) + <i>I</i> &minus; &kappa;(<i>a</i>&minus;&frac12;) + <i>c</i>(&#x1E21;&minus;<i>g</i><sub>i</sub>) + &sigma;&xi;<sub>i</sub>&#8201;&#41;</div>
@@ -108,9 +117,10 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
       <h4>Parameters</h4>
       <table class="params">
         <tr><td>&beta;</td><td>self-reinforcement (loop gain)</td><td>&kappa;</td><td>homeostat strength (sets the bar)</td></tr>
-        <tr><td><i>I</i></td><td>external drive</td><td><i>c</i></td><td>integrating gain (coupling)</td></tr>
+        <tr><td><i>I</i></td><td>environmental stressor</td><td><i>c</i></td><td>integrating gain (coupling)</td></tr>
         <tr><td><i>k</i></td><td>discount steepness (ADHD)</td><td>&lambda;</td><td>flexibility (autism)</td></tr>
       </table>
+      <p class="note">The stressor <i>I</i> is a steady outside push; an optional per-tick jitter adds a fresh uniform draw in &plusmn;&delta; each step, so <i>I</i>(<i>t</i>) = <i>I</i><sub>0</sub> + &delta;&#8201;U(&minus;1,1). It drives the time-series and field views.</p>
 
       <h4>Resting states &amp; bifurcations <span class="note">&nbsp; (single channel; at rest <i>a</i> = <i>g</i>)</span></h4>
       <div class="eq">effective gain &nbsp; G = &beta; &minus; &kappa;, &nbsp;&nbsp; fixed points: &nbsp; <i>g</i> = S&#40;&#8201;G(<i>g</i>&minus;&frac12;)&#8201;&#41;</div>
@@ -347,6 +357,14 @@ function svgHeatmap(title, matrix){
 
 function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
 
+// The environmental stressor as a drive(t): a steady push plus a fresh per-tick
+// fluctuation, the same value for every channel at a given tick. null = none.
+function stressDrive(){
+  if(stress === 0 && stressJitter === 0) return null;
+  var s = stress, j = stressJitter, rng = mulberry32(20240517);
+  return function(){ return s + j * (2*rng() - 1); };
+}
+
 // Each view returns {svgs, title, body}: a friendly heading and a plain-language
 // reading of what the picture means. The point is a feel for the model, so the
 // text leans on the model's own ideas (flooding, collapse, snap vs slide, swing,
@@ -464,13 +482,15 @@ function viewRecover(p){
 }
 
 function viewSeries(p){
-  if(p.noise === 0) p.noise = 0.02;
+  p.noise = noisy ? SERIES_NOISE_ON : SERIES_NOISE_OFF;
   var T=1000.0;
-  var r = simulate(p, T, 1, null, 0.5, 0.5, gaussFactory(p.seed));
+  // start just off the unstable euthymic point so the dynamics develop on their own
+  var r = simulate(p, T, 1, stressDrive(), 0.55, 0.5, gaussFactory(p.seed));
   var meanG = col(r.g, 0);
   var t = downsample(r.t, 2000), gp = downsample(meanG, 2000);
   var series = [{label:"g (gain)", xs:t, ys:gp}];
-  if(p.ka>0) series.push({label:"a (the bar)", xs:t, ys:downsample(r.a, 2000)});
+  // the bar is a live control in every condition, so always show it (when on)
+  if(p.adapt) series.push({label:"a (the bar)", xs:t, ys:downsample(r.a, 2000)});
   var svg = svgLines("The state over time", "time  t",
     "g  (0 collapsed, 1 flooded)", series);
   var ge = p.beta - (p.adapt ? p.ka : 0);
@@ -498,9 +518,10 @@ function viewSeries(p){
 }
 
 function viewIntegration(p){
-  if(p.noise === 0) p.noise = 0.05;
+  p.noise = noisy ? INTEG_NOISE_ON : INTEG_NOISE_OFF;
   var n=12, T=1000.0;
-  var r = simulate(p, T, n, null, 0.5, 0.5, gaussFactory(p.seed));
+  var g0 = linspace(0.45, 0.55, n);   // spread starts so channels can split
+  var r = simulate(p, T, n, stressDrive(), g0, 0.5, gaussFactory(p.seed));
   var half = Math.floor(r.g.length/2), spreads=[];
   for(var s=half;s<r.g.length;s++) spreads.push(pstdev(r.g[s]));
   var coherent = mean(spreads) < 0.1;
@@ -580,15 +601,15 @@ var RUNNERS = {
 // oscillator's ka along. The UI dims the knobs a view ignores using this map.
 var VIEW_USES = {
   fp: ["beta", "ka"], sweep: ["beta"], recover: [],
-  series: ["beta", "I", "ka", "c", "noise"],
-  integration: ["beta", "ka", "c", "noise"],
+  series: ["beta", "ka", "c"],
+  integration: ["beta", "ka", "c"],
   profile_adhd: ["k"], profile_autism: ["lam"]
 };
 
 function runView(view, state){
   var uses = VIEW_USES[view] || [];
   var p = defaults();
-  ["beta", "I", "ka", "c", "k", "lam", "noise"].forEach(function(key){
+  ["beta", "ka", "c", "k", "lam"].forEach(function(key){
     if(uses.indexOf(key) >= 0 && state[key] !== undefined) p[key] = state[key];
   });
   p.adapt = (state.adapt !== undefined) ? state.adapt : 1;
@@ -597,19 +618,35 @@ function runView(view, state){
 
 // ---- UI --------------------------------------------------------------------
 
+// Intrinsic noise (xi): "add randomness" picks a lifelike level or a small floor.
+// Fragmentation and coherence are genuinely noise-driven, so the floor is small
+// but not zero. Series/integration set their own from `noisy`.
+var noisy = true;
+var SERIES_NOISE_ON = 0.12, SERIES_NOISE_OFF = 0.012;
+var INTEG_NOISE_ON  = 0.08, INTEG_NOISE_OFF  = 0.01;
+
+// Environmental stressor: a steady push plus a fresh per-tick fluctuation, shared
+// across channels (it is the external drive I, made time-varying). Applied to the
+// dynamic views (series, integration); 0/0 means no stressor.
+var stress = 0, stressJitter = 0;
+
 var KNOBS = [
   {key:"beta", name:"Self-reinforcement (winning breeds winning)", min:0, max:10, step:0.05},
-  {key:"I", name:"Outside pressure (stress, a strong input)", min:-4, max:4, step:0.05},
   {key:"ka", name:"Mood-regulator strength", min:0, max:8, step:0.1},
   {key:"c", name:"How tightly the mind coheres as one", min:0, max:4, step:0.05},
   {key:"k", name:"How steeply the future is discounted (ADHD)", min:0.05, max:1.5, step:0.01},
-  {key:"lam", name:"How flexibly attention adapts (autism)", min:0, max:1, step:0.01},
-  {key:"noise", name:"Random fluctuation", min:0, max:0.2, step:0.005}
+  {key:"lam", name:"How flexibly attention adapts (autism)", min:0, max:1, step:0.01}
 ];
-var DEF = {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, noise:0, adapt:1};
+var STRESS_KNOBS = [
+  {key:"stress", name:"Stressor (steady push)", min:-3, max:3, step:0.1},
+  {key:"stressJitter", name:"Stressor jitter (per tick)", min:0, max:2, step:0.05}
+];
+var DEF = {beta:2, ka:0, c:1, k:0.2, lam:1, adapt:1};
+// The homeostat (ka) is a live control in every condition, so the bar moves
+// everywhere; only bipolar's ka is high enough (with beta) to cross the Hopf.
 var PRESETS = {
-  baseline:{beta:2}, schizophrenia:{beta:8, c:0.2, ka:0},
-  bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, k:0.95}, autism:{beta:2, lam:0.1}
+  baseline:{beta:2, ka:2}, schizophrenia:{beta:8, c:0.2, ka:2},
+  bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, ka:2, k:0.95}, autism:{beta:2, ka:2, lam:0.1}
 };
 // The five conditions are the primary control. Each shows the graphs that tell
 // its story honestly: a malfunction shows its dynamics; a miscalibration leads
@@ -670,26 +707,38 @@ function markConditions(){
     b.classList.toggle("active", b.dataset.key === cond);
   });
 }
+function makeSlider(box, kn, onInput){
+  var wrap = document.createElement("div"); wrap.className="slider"; wrap.dataset.key=kn.key;
+  var row = document.createElement("div"); row.className="row";
+  var nm = document.createElement("span"); nm.className="name"; nm.textContent=kn.name;
+  var val = document.createElement("span"); val.className="val"; val.id="v_"+kn.key;
+  row.appendChild(nm); row.appendChild(val);
+  var inp = document.createElement("input");
+  inp.type="range"; inp.min=kn.min; inp.max=kn.max; inp.step=kn.step; inp.id="s_"+kn.key;
+  inp.oninput = function(){ onInput(parseFloat(inp.value), val); };
+  wrap.appendChild(row); wrap.appendChild(inp); box.appendChild(wrap);
+}
 function buildSliders(){
-  var box = el("sliders");
   KNOBS.forEach(function(kn){
-    var wrap = document.createElement("div"); wrap.className="slider"; wrap.dataset.key=kn.key;
-    var row = document.createElement("div"); row.className="row";
-    var nm = document.createElement("span"); nm.className="name"; nm.textContent=kn.name;
-    var val = document.createElement("span"); val.className="val"; val.id="v_"+kn.key;
-    row.appendChild(nm); row.appendChild(val);
-    var inp = document.createElement("input");
-    inp.type="range"; inp.min=kn.min; inp.max=kn.max; inp.step=kn.step; inp.id="s_"+kn.key;
-    inp.oninput = function(){
-      state[kn.key] = parseFloat(inp.value);
-      val.textContent = (+state[kn.key]).toFixed(2);
+    makeSlider(el("sliders"), kn, function(v, val){
+      state[kn.key] = v; val.textContent = v.toFixed(2);
       cond = "custom"; markConditions(); scheduleDash();
-    };
-    wrap.appendChild(row); wrap.appendChild(inp); box.appendChild(wrap);
+    });
+  });
+  // Stressor sliders drive the global environment; they modify whatever condition
+  // is selected, so they clear the cache and re-render but keep the condition.
+  STRESS_KNOBS.forEach(function(kn){
+    makeSlider(el("stressSliders"), kn, function(v, val){
+      if(kn.key === "stress") stress = v; else stressJitter = v;
+      val.textContent = v.toFixed(2);
+      dashCache = {}; scheduleDash();
+    });
   });
 }
 function syncSliders(){
   KNOBS.forEach(function(kn){ el("s_"+kn.key).value = state[kn.key]; el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2); });
+  el("s_stress").value = stress; el("v_stress").textContent = stress.toFixed(2);
+  el("s_stressJitter").value = stressJitter; el("v_stressJitter").textContent = stressJitter.toFixed(2);
   el("adapt").checked = !!state.adapt;
 }
 function applyPreset(name){
@@ -728,6 +777,7 @@ function renderDashboard(){
 }
 
 el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; cond = "custom"; markConditions(); scheduleDash(); };
+el("noisy").onchange = function(){ noisy = this.checked; dashCache = {}; renderDashboard(); };
 
 var mathModal = el("mathModal");
 el("mathBtn").onclick = function(){ mathModal.hidden = false; };

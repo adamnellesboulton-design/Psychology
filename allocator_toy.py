@@ -17,13 +17,16 @@ of one variable. The whole model is one update rule run with different knobs:
 
     dg_i/dt = ( -g_i + S( beta*(g_i - 0.5) + I - ka*(a - 0.5)
                           + c*(mean(g) - g_i) + noise_i ) ) / tau_g
-    da/dt   = ( mean(g) - a ) / tau_a          # slow; only the oscillator uses it
+    da/dt   = ( mean(g) - a ) / tau_a          # slow; the bar, engaged everywhere
 
 S is the logistic squash; i indexes channels (1 by default, 12 for integration).
 a is "the bar" of the paper: the level of relevance the homeostat demands before
 it admits a bid, drifting slowly against whichever state the field is in. The
-knobs map to named settings in the paper (see the Params class and README):
-beta = self-reinforcement / loop gain, I = external drive, ka = strength of the
+homeostat is engaged in every condition, so the bar moves in all of them; only
+bipolar crosses its Hopf into a sustained swing. The knobs map to named settings
+in the paper (see the Params class and README):
+beta = self-reinforcement / loop gain, I = environmental stressor (a steady push
+from outside; stress_jitter adds a per-tick fluctuation), ka = strength of the
 slow homeostat that sets the bar a, c = integrating gain / coupling across
 channels, k = discount steepness (ADHD target), lam = flexibility (autism).
 
@@ -120,9 +123,11 @@ class Params:
     """The knobs. Each maps to a named setting in the paper (see module docs)."""
 
     def __init__(self, beta=2.0, I=0.0, ka=0.0, c=1.0, k=0.2, lam=1.0,
-                 adapt=True, noise=0.0, tau_g=1.0, tau_a=40.0, dt=0.05, seed=0):
+                 adapt=True, noise=0.0, stress_jitter=0.0,
+                 tau_g=1.0, tau_a=40.0, dt=0.05, seed=0):
         self.beta = beta      # self-reinforcement / loop gain (the fold engine)
-        self.I = I            # external drive
+        self.I = I            # environmental stressor: a steady push from outside
+        self.stress_jitter = stress_jitter  # per-tick range delta added to I
         self.ka = ka          # homeostat strength (sets the bar a; its Hopf is bipolar)
         self.c = c            # integrating gain / coupling (its fold is schizophrenia)
         self.k = k            # discount steepness (ADHD target; profile only)
@@ -172,6 +177,18 @@ def simulate(p, T, n=1, drive=None, g0=None, a0=0.5, rng=None):
         out_a.append(a)
         t.append(now)
     return t, out_g, out_a
+
+
+def stress_drive(p, rng):
+    """Build the environmental-stressor drive: a steady push p.I plus, if asked,
+    a per-tick fluctuation uniform in [-stress_jitter, +stress_jitter]. Returns
+    None when there is nothing to add, so simulate() uses the constant p.I."""
+    if p.I == 0.0 and p.stress_jitter == 0.0:
+        return None
+    base, jit = p.I, p.stress_jitter
+    if jit == 0.0:
+        return lambda now: base
+    return lambda now: base + jit * (2.0 * rng.random() - 1.0)
 
 
 def settle(p, drive_value, g0, a0=0.5, T=80.0):
@@ -405,19 +422,27 @@ def maybe_plot(args):
 # Presets: the four conditions plus baseline
 # ----------------------------------------------------------------------------
 #
-#   preset          regime                            knobs              signature
-#   baseline        monostable                        beta=2             slides, recovers
-#   schizophrenia   folded loop, integration failed   beta=8, c=0.2      fragments, no return
-#   bipolar         folded loop, integration intact   beta=8, c=3, ka=6  slow oscillation
-#   adhd            monostable, steep target          beta=2, k=0.95     two-armed over delay
-#   autism          monostable, stuck target          beta=2, lam=0.1    two-armed over volatility
+#   preset          regime                            knobs                signature
+#   baseline        calm single state                 beta=2, ka=2         slides, recovers
+#   schizophrenia   loop folds past the homeostat      beta=8, ka=2, c=0.2  fragments, no return
+#   bipolar         homeostat crosses a Hopf           beta=8, ka=6, c=3    slow oscillation
+#   adhd            calm loop, steep target            beta=2, ka=2, k=0.95 two-armed over delay
+#   autism          calm loop, stuck target            beta=2, ka=2, lam=0.1 two-armed over volatility
+#
+# The homeostat (ka) is engaged in every preset, so the bar (a) moves in all of
+# them; the conditions differ in where that leaves the loop. baseline/adhd/autism
+# keep effective gain beta-ka low (a calm single state); schizophrenia's loop is
+# strong enough that even with the homeostat opposing it the effective gain stays
+# past the fold (beta-ka = 6 > 4); bipolar's effective gain is below the fold
+# (beta-ka = 2 < 4) but its homeostat is strong enough to lose its damping and
+# cross the Hopf. Only bipolar crosses a bifurcation; the bar moves everywhere.
 
 PRESETS = {
-    "baseline":      dict(beta=2.0),
-    "schizophrenia": dict(beta=8.0, c=0.2, ka=0.0),
+    "baseline":      dict(beta=2.0, ka=2.0),
+    "schizophrenia": dict(beta=8.0, c=0.2, ka=2.0),
     "bipolar":       dict(beta=8.0, c=3.0, ka=6.0),
-    "adhd":          dict(beta=2.0, k=0.95),
-    "autism":        dict(beta=2.0, lam=0.1),
+    "adhd":          dict(beta=2.0, ka=2.0, k=0.95),
+    "autism":        dict(beta=2.0, ka=2.0, lam=0.1),
 }
 
 
@@ -428,7 +453,8 @@ def resolve_params(args):
     if getattr(args, "preset", None):
         for key, val in PRESETS[args.preset].items():
             setattr(p, key, val)
-    for key in ("beta", "I", "ka", "c", "k", "lam", "noise", "seed", "dt"):
+    for key in ("beta", "I", "stress_jitter", "ka", "c", "k", "lam",
+                "noise", "seed", "dt"):
         val = getattr(args, key, None)
         if val is not None:
             setattr(p, key, val)
@@ -596,7 +622,9 @@ def cmd_series(args):
     if p.noise == 0.0:
         p.noise = 0.02
     T = 1000.0
-    t, g, a = simulate(p, T, n=1, g0=0.5, a0=0.5)
+    rng = random.Random(p.seed)
+    t, g, a = simulate(p, T, n=1, g0=0.55, a0=0.5,
+                       drive=stress_drive(p, rng), rng=rng)
     mean_g = [row[0] for row in g]
 
     # Pad the scale a little past [0,1] so a channel resting on the collapse
@@ -604,7 +632,7 @@ def cmd_series(args):
     print("time series, preset = %s, beta = %.3g, ka = %.3g, c = %.3g"
           % (getattr(args, "preset", None), p.beta, p.ka, p.c))
     print("  g:  " + sparkline(downsample(mean_g, 70), -0.1, 1.1))
-    if p.adapt and p.ka > 0:
+    if p.adapt:
         print("  a:  " + sparkline(downsample(a, 70), -0.1, 1.1))
     crossings = sum(1 for i in range(len(mean_g) - 1)
                     if (mean_g[i] > 0.5) != (mean_g[i + 1] > 0.5))
@@ -623,8 +651,8 @@ def cmd_series(args):
 
     if maybe_plot(args):
         series = [("g", t, mean_g)]
-        if p.ka > 0:
-            series.append(("a (slow)", t, a))
+        if p.adapt:
+            series.append(("a (the bar)", t, a))
         save_svg_lines("series_%s" % (getattr(args, "preset", None) or "custom"),
                        "series, preset = %s" % getattr(args, "preset", None),
                        "time  t", "g  (0 collapsed, 1 flooded)", series)
@@ -639,7 +667,10 @@ def cmd_integration(args):
         p.noise = 0.05
     n = 12
     T = 1000.0
-    t, g, a = simulate(p, T, n=n, g0=0.5, a0=0.5, rng=random.Random(p.seed))
+    g0 = linspace(0.45, 0.55, n)  # spread starts so channels can split without noise
+    rng = random.Random(p.seed)
+    t, g, a = simulate(p, T, n=n, g0=g0, a0=0.5,
+                       drive=stress_drive(p, rng), rng=rng)
 
     # Cross-channel spread: how far apart the channels sit, averaged over the
     # back half of the run (after any transient).
@@ -861,7 +892,10 @@ def cmd_guide(args):
     print()
     print("  dg_i/dt = ( -g_i + S( beta*(g_i-0.5) + I - ka*(a-0.5)")
     print("                        + c*(mean(g)-g_i) + noise_i ) ) / tau_g")
-    print("  da/dt   = ( mean(g) - a ) / tau_a     # slow; only the oscillator uses it")
+    print("  da/dt   = ( mean(g) - a ) / tau_a     # slow; the bar, on in every preset")
+    print()
+    print("  I here is the environmental stressor (a steady push, plus an optional")
+    print("  per-tick jitter via --stress-jitter); noise_i is the model's own noise.")
     print()
     print("  g   the allocator's net gain on relevance, in (0,1). This is the one")
     print("      moving part. high g = flooding arm (grips too hard, world too loud);")
@@ -870,10 +904,11 @@ def cmd_guide(args):
     print("  S   the logistic squash. Its slope at the center is 0.25, which is why")
     print("      beta=4 (where beta*0.25 = 1) is the tipping point.")
     print("  a   'the bar': the relevance level the homeostat demands before it admits")
-    print("      a bid, a slow lagging average of g. It only bites when ka > 0. The")
-    print("      homeostat opposes the self-reinforcement, so the effective gain is")
-    print("      beta-ka: it keeps a single euthymic resting state but can lose its")
-    print("      damping and orbit it (the Hopf behind bipolar).")
+    print("      a bid, a slow lagging average of g. The homeostat is engaged in every")
+    print("      condition, so the bar moves in all of them. It opposes the self-")
+    print("      reinforcement, so the effective gain is beta-ka: it keeps a single")
+    print("      euthymic resting state but can lose its damping and orbit it (the")
+    print("      Hopf behind bipolar). Only bipolar crosses that Hopf.")
     print("  i   the channel index: 1 channel by default, 12 for `integration`.")
     print()
 
@@ -887,8 +922,12 @@ def cmd_guide(args):
     print("                         one resting state, the output slides. beta>4: with")
     print("                         the homeostat off the loop folds into two basins.")
     print(fmt % ("--I", _num(d.I),
-                 "external drive: stress, a salient input, a dopaminergic"))
-    print("                         fluctuation. Shifts the contest one way or other.")
+                 "ENVIRONMENTAL STRESSOR: a steady push from outside (stress,"))
+    print("                         a salient input, a dopaminergic shift). Adds to every")
+    print("                         channel's contest in series and integration.")
+    print(fmt % ("--stress-jitter", _num(d.stress_jitter),
+                 "per-tick RANGE DELTA on the stressor: each step adds a"))
+    print("                         fresh uniform draw in +/- this, so the push fluctuates.")
     print(fmt % ("--ka", _num(d.ka),
                  "HOMEOSTAT strength (sets the bar a). It opposes the loop,"))
     print("                         so effective gain = beta-ka keeps one euthymic point;")
@@ -932,18 +971,20 @@ def cmd_guide(args):
     print("THE PRESETS  (the four conditions, plus a baseline)")
     print(line)
     print()
-    print("  baseline       beta=2                monostable; slides, recovers fast")
-    print("  schizophrenia  beta=8, c=0.2         folded loop, integration failed;")
+    print("  baseline       beta=2, ka=2          calm single state; slides, recovers fast")
+    print("  schizophrenia  beta=8, ka=2, c=0.2   loop folds past the homeostat (beta-ka=6);")
     print("                                       fragments, no return")
-    print("  bipolar        beta=8, c=3, ka=6     folded loop, integration intact;")
+    print("  bipolar        beta=8, ka=6, c=3     homeostat crosses a Hopf (beta-ka=2);")
     print("                                       slow coherent oscillation")
-    print("  adhd           beta=2, k=0.95        monostable, steep target;")
+    print("  adhd           beta=2, ka=2, k=0.95  calm loop, steep target;")
     print("                                       two-armed over reward delay")
-    print("  autism         beta=2, lam=0.1       monostable, stuck target;")
+    print("  autism         beta=2, ka=2, lam=0.1 calm loop, stuck target;")
     print("                                       two-armed over volatility")
     print()
-    print("  A preset just sets some knobs; any of them can be overridden on top,")
-    print("  so you can mix faults (e.g. a miscalibrated target on an unstable loop).")
+    print("  The homeostat (ka) is on in every preset, so the bar (a) moves in all of")
+    print("  them; only bipolar crosses a bifurcation. A preset just sets some knobs;")
+    print("  any of them can be overridden on top, so you can mix faults (e.g. a")
+    print("  miscalibrated target on an unstable loop).")
     print()
 
     print(line)
@@ -1062,7 +1103,10 @@ def build_parser():
                         help="one of the four conditions, plus baseline")
         sp.add_argument("--beta", type=float,
                         help="stability setting / loop gain (fold at beta=4)")
-        sp.add_argument("--I", type=float, help="external drive (stress, salient input)")
+        sp.add_argument("--I", type=float,
+                        help="environmental stressor: a steady push from outside")
+        sp.add_argument("--stress-jitter", type=float, dest="stress_jitter",
+                        help="per-tick range delta on the stressor (uniform +/- this)")
         sp.add_argument("--ka", type=float,
                         help="strength of slow adaptation (ka>4 oscillates a folded loop)")
         sp.add_argument("--c", type=float,
