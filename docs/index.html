@@ -87,7 +87,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
     <div class="group">
       <label>Environmental stressor</label>
       <div id="stressSliders"></div>
-      <p class="hint">A push from outside, with optional per-tick jitter. Valence leans the random kicks toward flooding (+) or collapse (-). Drives the time-series and field views.</p>
+      <p class="hint">A push from outside, with a per-tick random wobble (on a little by default). The lean biases that wobble up (more gain) or down (less gain); 0 is even. Drives the time-series and field views.</p>
     </div>
     <details class="group" id="advanced">
       <summary>Adjust the dials yourself</summary>
@@ -120,7 +120,7 @@ footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
         <tr><td><i>I</i></td><td>environmental stressor</td><td><i>c</i></td><td>integrating gain (coupling)</td></tr>
         <tr><td><i>k</i></td><td>discount steepness (ADHD)</td><td>&lambda;</td><td>flexibility (autism)</td></tr>
       </table>
-      <p class="note">The stressor <i>I</i> is a steady outside push; an optional per-tick jitter adds a random kick of size up to &delta; each step. A valence &nu; &isin; [&minus;1,1] leans those kicks: the kick is upward with probability (1+&nu;)/2, so <i>I</i>(<i>t</i>) = <i>I</i><sub>0</sub> &plusmn; &delta;&#8201;U(0,1) with the sign biased by &nu; (&nu; &gt; 0 toward flooding, &nu; &lt; 0 toward collapse). It drives the time-series and field views.</p>
+      <p class="note">The stressor <i>I</i> is a steady outside push; a per-tick wobble adds a random kick of size up to &delta; each step. A lean &nu; &isin; [&minus;1,1] biases those kicks: the kick is upward with probability (1+&nu;)/2, so <i>I</i>(<i>t</i>) = <i>I</i><sub>0</sub> &plusmn; &delta;&#8201;U(0,1) with the sign biased by &nu; (&nu; &gt; 0 pushes the field up, &nu; &lt; 0 down). It drives the time-series and field views.</p>
 
       <h4>Resting states &amp; bifurcations <span class="note">&nbsp; (single channel; at rest <i>a</i> = <i>g</i>)</span></h4>
       <div class="eq">effective gain &nbsp; G = &beta; &minus; &kappa;, &nbsp;&nbsp; fixed points: &nbsp; <i>g</i> = S&#40;&#8201;G(<i>g</i>&minus;&frac12;)&#8201;&#41;</div>
@@ -406,12 +406,12 @@ function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
 
 // The environmental stressor as a drive(t): a steady push plus a fresh per-tick
 // fluctuation, the same value for every channel at a given tick. null = none.
-// Valence leans the random kicks: each tick the kick is upward (toward flooding)
-// with probability (1+valence)/2, so valence > 0 biases stress toward flooding,
-// valence < 0 toward collapse, valence = 0 is even. Magnitude stays random.
+// The lean biases the random kicks: each tick the kick is upward with probability
+// (1+lean)/2, so lean > 0 pushes the field up (more gain), lean < 0 pushes it down
+// (less gain), lean = 0 is even. The kick's magnitude stays random.
 function stressDrive(){
   if(stress === 0 && stressJitter === 0) return null;
-  var s = stress, j = stressJitter, pUp = (1 + stressValence)/2, rng = mulberry32(20240517);
+  var s = stress, j = stressJitter, pUp = (1 + stressLean)/2, rng = mulberry32(20240517);
   if(j === 0) return function(){ return s; };
   return function(){
     var sign = (rng() < pUp) ? 1 : -1;
@@ -628,12 +628,12 @@ function viewSeries(p){
     body = "This is the overall state over time. It settles to a steady level and "
       + "holds there, wobbling a little with random noise -- nothing builds, nothing "
       + "tips. A regulator doing its job.";
-    var lean = stress + (stressJitter > 0 ? stressValence : 0);
+    var lean = stress + (stressJitter > 0 ? stressLean : 0);
     if(Math.abs(lean) > 1e-9)
       body += (lean > 0
-        ? " The outside stressor has lifted that level toward flooding, but it is "
-          + "still one steady level -- shifted, not swinging or stuck."
-        : " The outside stressor has pressed that level toward collapse, but it is "
+        ? " The outside stressor has lifted that resting level up, but it is still "
+          + "one steady level -- shifted, not swinging or stuck."
+        : " The outside stressor has pressed that resting level down, but it is "
           + "still one steady level -- shifted, not swinging or stuck.");
   }
   return {svgs:[svg], title:"The state over time", body:body};
@@ -753,7 +753,7 @@ var INTEG_NOISE_ON  = 0.08, INTEG_NOISE_OFF  = 0.01;
 // Environmental stressor: a steady push plus a fresh per-tick fluctuation, shared
 // across channels (it is the external drive I, made time-varying). Applied to the
 // dynamic views (series, integration); 0/0 means no stressor.
-var stress = 0, stressJitter = 0, stressValence = 0;
+var stress = 0, stressJitter = 0.3, stressLean = 0;
 
 var KNOBS = [
   {key:"beta", name:"Self-reinforcement (winning breeds winning)", min:0, max:10, step:0.05},
@@ -765,7 +765,7 @@ var KNOBS = [
 var STRESS_KNOBS = [
   {key:"stress", name:"Stressor (steady push)", min:-3, max:3, step:0.1},
   {key:"stressJitter", name:"Stressor jitter (per tick)", min:0, max:2, step:0.05},
-  {key:"stressValence", name:"Stressor valence (which way it leans)", min:-1, max:1, step:0.05}
+  {key:"stressLean", name:"Stressor lean (up / down)", min:-1, max:1, step:0.05}
 ];
 var DEF = {beta:2, ka:0, c:1, k:0.2, lam:1, adapt:1};
 // The homeostat (ka) is a live control in every condition, so the bar moves
@@ -859,7 +859,7 @@ function buildSliders(){
     makeSlider(el("stressSliders"), kn, function(v, val){
       if(kn.key === "stress") stress = v;
       else if(kn.key === "stressJitter") stressJitter = v;
-      else stressValence = v;
+      else stressLean = v;
       val.textContent = v.toFixed(2);
       dashCache = {}; scheduleDash();
     });
@@ -869,7 +869,7 @@ function syncSliders(){
   KNOBS.forEach(function(kn){ el("s_"+kn.key).value = state[kn.key]; el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2); });
   el("s_stress").value = stress; el("v_stress").textContent = stress.toFixed(2);
   el("s_stressJitter").value = stressJitter; el("v_stressJitter").textContent = stressJitter.toFixed(2);
-  el("s_stressValence").value = stressValence; el("v_stressValence").textContent = stressValence.toFixed(2);
+  el("s_stressLean").value = stressLean; el("v_stressLean").textContent = stressLean.toFixed(2);
   el("adapt").checked = !!state.adapt;
 }
 function applyPreset(name){

@@ -31,8 +31,8 @@ homeostat is engaged in every condition, so the bar moves in all of them; only
 bipolar crosses its Hopf into a sustained swing. The knobs map to named settings
 in the paper (see the Params class and README):
 beta = self-reinforcement / loop gain, I = environmental stressor (a steady push
-from outside; stress_jitter adds a per-tick fluctuation, stress_valence leans it
-toward flooding (+) or collapse (-)), ka = strength of the
+from outside; stress_jitter adds a per-tick random wobble, stress_lean biases that
+wobble up (+, more gain) or down (-, less gain)), ka = strength of the
 slow homeostat that sets the bar a, c = integrating gain / coupling across
 channels, k = discount steepness (ADHD target), lam = flexibility (autism).
 
@@ -129,12 +129,12 @@ class Params:
     """The knobs. Each maps to a named setting in the paper (see module docs)."""
 
     def __init__(self, beta=2.0, I=0.0, ka=0.0, c=1.0, k=0.2, lam=1.0,
-                 adapt=True, noise=0.0, stress_jitter=0.0, stress_valence=0.0,
+                 adapt=True, noise=0.0, stress_jitter=0.0, stress_lean=0.0,
                  tau_g=1.0, tau_a=40.0, dt=0.05, seed=0):
         self.beta = beta      # self-reinforcement / loop gain (the fold engine)
         self.I = I            # environmental stressor: a steady push from outside
-        self.stress_jitter = stress_jitter  # per-tick range delta added to I
-        self.stress_valence = stress_valence  # leans the jitter (+ flood, - collapse)
+        self.stress_jitter = stress_jitter  # per-tick random wobble added to I
+        self.stress_lean = stress_lean  # biases the wobble up (+) or down (-)
         self.ka = ka          # homeostat strength (sets the bar a; its Hopf is bipolar)
         self.c = c            # integrating gain / coupling (its fold is schizophrenia)
         self.k = k            # discount steepness (ADHD target; profile only)
@@ -188,14 +188,14 @@ def simulate(p, T, n=1, drive=None, g0=None, a0=0.5, rng=None):
 
 def stress_drive(p, rng):
     """Build the environmental-stressor drive: a steady push p.I plus, if asked,
-    a per-tick random kick of size up to stress_jitter. The valence leans those
-    kicks: the kick is upward (toward flooding) with probability (1+valence)/2,
-    so valence > 0 biases the stress toward flooding and valence < 0 toward
-    collapse, with valence = 0 even. Returns None when there is nothing to add,
-    so simulate() uses the constant p.I."""
+    a per-tick random kick of size up to stress_jitter. The lean biases those
+    kicks: the kick is upward with probability (1+lean)/2, so lean > 0 pushes the
+    field up (more gain) and lean < 0 pushes it down (less gain), with lean = 0
+    even. Returns None when there is nothing to add, so simulate() uses the
+    constant p.I."""
     if p.I == 0.0 and p.stress_jitter == 0.0:
         return None
-    base, jit, p_up = p.I, p.stress_jitter, (1.0 + p.stress_valence) / 2.0
+    base, jit, p_up = p.I, p.stress_jitter, (1.0 + p.stress_lean) / 2.0
     if jit == 0.0:
         return lambda now: base
 
@@ -467,7 +467,7 @@ def resolve_params(args):
     if getattr(args, "preset", None):
         for key, val in PRESETS[args.preset].items():
             setattr(p, key, val)
-    for key in ("beta", "I", "stress_jitter", "stress_valence", "ka", "c",
+    for key in ("beta", "I", "stress_jitter", "stress_lean", "ka", "c",
                 "k", "lam", "noise", "seed", "dt"):
         val = getattr(args, key, None)
         if val is not None:
@@ -909,8 +909,8 @@ def cmd_guide(args):
     print("  da/dt   = ( mean(g) - a ) / tau_a     # slow; the bar, on in every preset")
     print()
     print("  I here is the environmental stressor (a steady push, plus an optional")
-    print("  per-tick jitter via --stress-jitter, leaned by --stress-valence toward")
-    print("  flooding or collapse); noise_i is the model's own noise.")
+    print("  per-tick wobble via --stress-jitter, biased up or down by")
+    print("  --stress-lean); noise_i is the model's own noise.")
     print()
     print("  g   the allocator's net gain on relevance, in (0,1). This is the one")
     print("      moving part. high g = flooding arm (grips too hard, world too loud);")
@@ -946,9 +946,9 @@ def cmd_guide(args):
     print(fmt % ("--stress-jitter", _num(d.stress_jitter),
                  "per-tick RANGE DELTA on the stressor: each step adds a"))
     print("                         fresh random kick up to this, so the push fluctuates.")
-    print(fmt % ("--stress-valence", _num(d.stress_valence),
-                 "VALENCE: lean the kicks toward flooding (+1) or"))
-    print("                         collapse (-1); 0 is even. Biases which way stress shoves.")
+    print(fmt % ("--stress-lean", _num(d.stress_lean),
+                 "LEAN: bias the wobble up (+1, more gain) or down"))
+    print("                         (-1, less gain); 0 is even. Which way the stress shoves.")
     print(fmt % ("--ka", _num(d.ka),
                  "HOMEOSTAT strength (sets the bar a). It opposes the loop,"))
     print("                         so effective gain = beta-ka keeps one euthymic point;")
@@ -1128,8 +1128,8 @@ def build_parser():
                         help="environmental stressor: a steady push from outside")
         sp.add_argument("--stress-jitter", type=float, dest="stress_jitter",
                         help="per-tick range delta on the stressor (random kick up to this)")
-        sp.add_argument("--stress-valence", type=float, dest="stress_valence",
-                        help="lean the jitter: +1 toward flooding, -1 toward collapse, 0 even")
+        sp.add_argument("--stress-lean", type=float, dest="stress_lean",
+                        help="bias the wobble: +1 up (more gain), -1 down (less gain), 0 even")
         sp.add_argument("--ka", type=float,
                         help="strength of slow adaptation (ka>4 oscillates a folded loop)")
         sp.add_argument("--c", type=float,
