@@ -74,6 +74,10 @@ The **environment** control sets the fitness landscape the fill competes in:
 A small amount of randomness rides on the fill at all times (an always-on
 environmental wobble), so the system is never perfectly quiet.
 
+**Mood** reads as the fill level along this axis: toward feast is elevated
+(manic), toward famine is low (depressed). The bipolar limit cycle is exactly
+this level swinging between the two poles.
+
 ## Layers
 
 The layer picker reframes the same running model at four levels:

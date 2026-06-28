@@ -161,7 +161,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
       <div class="group">
         <h2>Environment <span class="tag">fitness, surplus vs deficit</span></h2>
         <div class="ctl" id="ctl-env"></div>
-        <p class="note">Feast vs famine sets the reproductive environment: feast (+) is a surplus that grows the fill, famine (-) a deficit that starves it. Randomness rides on it, always on.</p>
+        <p class="note">Feast vs famine sets the reproductive environment: feast (+) is a surplus that grows the fill, famine (-) a deficit that starves it. Randomness rides on it, always on. Mood tracks the fill level: feast lifts it (manic), famine lowers it (depressed); bipolar swings between the two.</p>
       </div>
       <div class="group">
         <h2>World &amp; run</h2>
@@ -426,10 +426,10 @@ function drawFill(cv, s, P){
   var flooded=s.F>P.Fstar+P.band, starved=s.F<P.Fstar-P.band;
   ctx.fillStyle = flooded||starved ? "#ff4d57" : "#37d27a";
   ctx.fillRect(gx-16, Y(s.F), 32, bot-Y(s.F));
-  // labels
+  // labels: the fill level reads as mood along the feast..famine axis
   ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.textAlign="center";
-  ctx.fillText("feast", gx, top-6);
-  ctx.fillText("famine", gx, bot+12);
+  ctx.fillText("feast (manic)", gx, top-6);
+  ctx.fillText("famine (depressed)", gx, bot+12);
   ctx.fillStyle="#9fb2c0"; ctx.fillText("F="+s.F.toFixed(2), gx, Y(s.F)-6);
   ctx.textAlign="left";
 }
