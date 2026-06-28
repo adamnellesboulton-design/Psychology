@@ -189,7 +189,9 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 // ===========================================================================
 var CONFIG = {
   n:8, dt:0.01, substeps:8, levels:4,   // nested stack depth: level n .. cellular
-  eta:2.4, etaDepth:1.8, lambda:2.0, c:1.4,   // etaDepth: migration speeds up per level down
+  eta:2.4, lambda:2.0, c:1.4,
+  clockSlow:0.7,      // each level up runs this factor slower (timescale separation)
+  couple:0.45,        // how strongly a level's fill is disturbed by the level below's
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
   delta:0.6, phi:1.0,
   s:0.8, rho0:1.0, rhoMin:0.05,
@@ -204,7 +206,7 @@ var CONFIG = {
   sigmaM:0.02,        // epistemic uncertainty: per-tick wobble in the system's estimate m
   // diagnostics thresholds (one place; tunable)
   band:0.40,          // euthymic half-band on F
-  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45,
+  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.15,
   ewsWin:300
 };
 var HEALTHY = {G:1.0, kP:1.0, delta:0.6, phi:1.0, env:0.0};
@@ -222,31 +224,34 @@ function makeU(n, seed){
 }
 
 // The model is a STACK of nested allocator contests (level n at the top, then
-// n-1, ... down to cellular). Each level is a live replicator contest with its
-// own coalitions u, division p, precision rho and consensus m. Coupling is
-// top-down: the top level tracks the external world; every lower level chases
-// its parent's pick (parent.m) as its own target. The four controls act at
-// every scale, so a malfunction or miscalibration cascades down the stack. The
-// top level is the collated headline. There is one fill homeostat (organism
-// mood / competition intensity), driven by the top level.
+// n-1, ... down to the bottom nucleus). Each level is a live replicator contest
+// with its own coalitions u, division p, precision rho and consensus m. Coupling
+// is BOTTOM-UP: only the bottom reads the external world; every level above reads
+// the level below (its consensus m as evidence, its fill F as a disturbance).
+// Clocks lengthen upward (top slowest). The top level is the collated headline.
+// Each level carries BOTH its division contest and its own fill. kP is per
+// level: it is the local fill damping and the site where the bipolar/ADHD lesion
+// is injected. levels[0] = top (n, slow, mood); last = bottom (the nucleus, fast,
+// reads the world).
 function initLevel(P, seed){
   var n=P.n, p=new Float64Array(n), rho=new Float64Array(n);
   for(var i=0;i<n;i++){ p[i]=1/n; rho[i]=P.rho0; }
-  return {p:p, rho:rho, yhat:[0,0], m:[0,0], pibar:0, u:makeU(n, seed)};
+  return {p:p, rho:rho, yhat:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
+          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, kP:P.kP};
 }
-function initFill(P){ return {F:P.Fstar, z:0, Fset:P.Fstar, theta:0}; }
+// clocks lengthen upward: each level a fixed factor slower than the one below
+// (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
+function clockRate(k){ return Math.pow(P.clockSlow, (P.levels-1)-k); }
 
 // preallocated scratch (no per-frame alloc in the hot path)
 var _pi=null, _dp=null, _drho=null;
 function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _dp=new Float64Array(n); _drho=new Float64Array(n);} }
 
-// one division contest at one level, tracking target y (the world for the top
-// level, the parent's consensus for the rest). eta is the migration rate (how
-// fast the field reconfigures); deeper levels run faster so they lock onto their
-// parent's pick tightly.
-function stepDivision(lv, P, y, dt, eta){
+// one division contest at one level, tracking target y (the world for the bottom
+// level, the level-below's consensus for the rest). dt is already scaled by the
+// level's clock, so upper levels reconfigure slower.
+function stepDivision(lv, P, y, dt){
   var n=P.n, u=lv.u; ensureScratch(n);
-  if(eta===undefined) eta=P.eta;
   // discounted evidence (horizon set by the discount rate); a short horizon
   // chases the noisy observation (ADHD).
   var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
@@ -266,7 +271,7 @@ function stepDivision(lv, P, y, dt, eta){
     pibar+=lv.p[i]*_pi[i];
   }
   for(i=0;i<n;i++){
-    _dp[i]=eta*lv.p[i]*(_pi[i]-pibar);
+    _dp[i]=P.eta*lv.p[i]*(_pi[i]-pibar);
     var ddy2=(u[i][0]-lv.yhat[0])*(u[i][0]-lv.yhat[0])+(u[i][1]-lv.yhat[1])*(u[i][1]-lv.yhat[1]);
     var rhoT=P.rho0*Math.exp(-ddy2/(P.s*P.s));
     _drho[i]=P.phi*(rhoT-lv.rho[i]);
@@ -277,26 +282,33 @@ function stepDivision(lv, P, y, dt, eta){
   lv.m[0]=mx; lv.m[1]=my; lv.pibar=pibar;
 }
 
-// the single fill homeostat (organism mood). Feast/famine shifts the setpoint
-// it defends; it is driven by the top level's mean payoff.
-function stepFill(fl, P, pibar, dt){
+// one level's fill homeostat. Defends Fstar (shifted by feast/famine), driven by
+// its own contest, AND disturbed by the fill of the level below (belowF) -- this
+// is how an oscillation propagates UP the stack. lv.kP is the local damping; at
+// kP->0 the homeostat loses its damping and Hopf-oscillates (the break). A slow,
+// well-damped upper level low-passes a fast disturbance from below (containment).
+function stepFill(lv, P, belowF, dt){
   var Fset=P.Fstar*(1+P.envGain*P.env);
-  var theta=P.theta0+P.kP*(fl.F-Fset)+P.kI*fl.z;
-  var dF=fl.F*(P.a*pibar - theta + P.sigmaF*randn());  // sigmaF = always-on randomness
-  fl.F=Math.max(0,fl.F+dt*dF);
-  // anti-windup: clamp the integrator well outside the normal range (~|z|<3)
-  fl.z=Math.max(-P.zClamp, Math.min(P.zClamp, fl.z+dt*(fl.F-Fset)));
-  fl.Fset=Fset; fl.theta=theta;
+  var theta=P.theta0 + lv.kP*(lv.F-Fset) + P.kI*lv.z;
+  var disturb = (belowF===null) ? 0 : P.couple*(belowF - Fset);
+  var dF=lv.F*(P.a*lv.pibar - theta + P.sigmaF*randn() + disturb);
+  lv.F=Math.max(0, lv.F + dt*dF);
+  lv.z=Math.max(-P.zClamp, Math.min(P.zClamp, lv.z + dt*(lv.F-Fset)));   // anti-windup
+  lv.Fset=Fset; lv.theta=theta;
 }
 
-// advance the whole stack one tick, top-down (each level's target is the level
-// above's consensus; the top tracks the world y)
-function stepStack(levels, fl, P, y, dt){
-  for(var k=0;k<levels.length;k++){
-    var target = (k===0) ? y : levels[k-1].m;
-    stepDivision(levels[k], P, target, dt, P.eta*Math.pow(P.etaDepth, k));  // faster with depth
+// advance the whole stack one tick, BOTTOM-UP: evidence and supply flow up. The
+// bottom (last index) reads the external world; every level above reads the level
+// below (its consensus m as evidence, its fill F as a disturbance on the fill).
+function stepStack(levels, P, y, dt){
+  var L=levels.length;
+  for(var k=L-1; k>=0; k--){
+    var sdt=dt*clockRate(k);
+    var target = (k===L-1) ? y : levels[k+1].m;
+    stepDivision(levels[k], P, target, sdt);
+    var belowF = (k===L-1) ? null : levels[k+1].F;
+    stepFill(levels[k], P, belowF, sdt);
   }
-  stepFill(fl, P, levels[0].pibar, dt);
 }
 
 // ===========================================================================
@@ -548,7 +560,8 @@ function drawTraces(cv, buf, P, viewLevel){
   // grid
   ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
   for(var g=0;g<=4;g++){ var gy=top+H*g/4; ctx.beginPath(); ctx.moveTo(x0,gy); ctx.lineTo(x1,gy); ctx.stroke(); }
-  var N=buf.F.length; if(N<2) return;
+  var Fv=buf.F[viewLevel], Hv=buf.H[viewLevel], errV=buf.err[viewLevel];
+  var N=Fv.length; if(N<2) return;
   function plot(arr, lo, hi, col){
     ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
     var lastY=top, M=arr.length, off=M-N;
@@ -562,10 +575,9 @@ function drawTraces(cv, buf, P, viewLevel){
     return lastY;
   }
   var Fmax=fillAxisMax(P);
-  var Hv=buf.H[viewLevel], errV=buf.err[viewLevel];
   // each line, then a label parked at the line's right-hand end, in its colour
   var labels=[];
-  labels.push({end:plot(buf.F, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
+  labels.push({end:plot(Fv, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
   labels.push({end:plot(Hv, 0, 1, "#ffb000"),        col:"#ffb000", txt:"dominance H"});
   labels.push({end:plot(errV, 0, 1.8, "#36b6c8"),    col:"#36b6c8", txt:"tracking error"});
   // label y starts at the line end, then de-overlap vertically (keeps `end` for the connector)
@@ -588,16 +600,17 @@ function drawTraces(cv, buf, P, viewLevel){
 // UI  (controls, layer picker, rAF loop)
 // ===========================================================================
 var P=Object.assign({}, CONFIG);
-// the nested stack: levels[0] is the top (level n, tracks the world), each
-// deeper level chases the one above. fill is the single organism homeostat.
+// the nested stack: levels[0] is the top (n, slow, mood), the last is the bottom
+// (the nucleus, fast, reads the world). Each level reads the one BELOW it. Each
+// carries its own fill, with per-level damping kP (the lesion site).
 var levels=[]; for(var _k=0;_k<P.levels;_k++) levels.push(initLevel(P, _k*1.7+0.4));
-var fill=initFill(P);
 var viewLevel=0;                 // which level the panels are drilled into
 var sel=-1;                      // selected coalition (-1 = none), for the register
 var t=0, speed=1, paused=false;
 var yJump=[0,0];
-// the target each level tracks (top = the world, others = parent's consensus)
-function levelTarget(k){ return k===0 ? evidence(t) : levels[k-1].m; }
+// the target each level tracks: the bottom reads the world, every level above
+// reads the consensus of the level below it (evidence flows up).
+function levelTarget(k){ return k===levels.length-1 ? evidence(t) : levels[k+1].m; }
 function levelName(k){ return k===0 ? "level n (top)" : (k===levels.length-1 ? "cellular (bottom)" : "level n-"+k); }
 
 function evidence(time){
@@ -611,9 +624,9 @@ function evidence(time){
 // H and err are kept per level (so drilling into a level shows its own history);
 // F is the single organism fill. ews drives the classifier off the top level.
 var BUFLEN=4200;
-var buf={F:[], H:[], err:[]};       // H[k], err[k] are arrays per level
-for(var _b=0;_b<P.levels;_b++){ buf.H.push([]); buf.err.push([]); }
-var ewsH=[], ewsF=[];
+var buf={F:[], H:[], err:[]};       // F[k], H[k], err[k] are arrays per level
+for(var _b=0;_b<P.levels;_b++){ buf.F.push([]); buf.H.push([]); buf.err.push([]); }
+var ewsH=[], ewsF=[];               // top-level H and fill F, for the classifier
 var pHist=[], PHIST=120;            // recent share vectors of the VIEWED level (for bar whiskers)
 var bidHist=[], BIDHIST=48;         // recent (p,rho) of every bid in the stack (bid-map density trail)
 
@@ -627,11 +640,13 @@ function slider(host, key, label, sym, fmt, hint){
     +'<div class="track"><div class="healthy" id="hb_'+key+'"></div></div>'
     +(hint?'<div class="hint">'+hint+'</div>':'');
   var inp=el("s_"+key), val=el("v_"+key);
-  inp.value = (key==="speed"?speed:P[key]);
-  function show(){ val.textContent = fmt(key==="speed"?speed:P[key]); }
+  // kP is per level (the lesion site): it reads/writes the currently viewed level
+  function cur(){ return key==="speed"?speed : key==="kP"?levels[viewLevel].kP : P[key]; }
+  inp.value = cur();
+  function show(){ val.textContent = fmt(cur()); }
   inp.addEventListener("input", function(){
     var v=parseFloat(inp.value);
-    if(key==="speed") speed=v; else P[key]=v;
+    if(key==="speed") speed=v; else if(key==="kP") levels[viewLevel].kP=v; else P[key]=v;
     show();
   });
   show();
@@ -644,7 +659,7 @@ function slider(host, key, label, sym, fmt, hint){
 
 var f2=function(x){return x.toFixed(2);};
 slider(el("ctl-G"),"G","Integrating gain","G",f2,"too high: winner freezes, decouples from y (delusion). too low: winner wanders (disorganized).");
-slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"toward 0: the fill loses its damping and swings, flood to starvation (bipolar).");
+slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). To 0: the fill loses its damping and swings (the break). Inject at the top -> propagates (bipolar); at the bottom -> contained (ADHD-like). The swing low-passes up the slow stack.");
 slider(el("ctl-delta"),"delta","Discount rate","d",f2,"too short: chases the instant, never holds a thread (ADHD).");
 slider(el("ctl-phi"),"phi","Precision flexibility","phi",f2,"toward 0: precision frozen, slow to re-track after a context shift (autism).");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
@@ -652,14 +667,15 @@ slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";}
 
 // layer picker -> which level of the stack the panels drill into
 function viewNote(k){
-  if(k===0) return "Level n, the top. This contest tracks the external world directly, and its pick becomes the target every level below must chase. The headline regime is read here: the whole stack collated to the top.";
-  if(k===levels.length-1) return "Cellular, the bottom of the stack. The finest contest, chasing the level above. The same four controls govern it; a malfunction set up top reaches all the way down.";
-  return "Level n-"+k+", a subordinate contest. Its world is the pick (m) of the level above; it runs the same allocator dynamics one scale finer. A control set wrong is wrong at every scale.";
+  if(k===0) return "Level n, the top: slow, global, mood. It reads the level below (not the world directly) and runs on the longest clock. The headline regime is read here -- the whole stack collated to the top. A fill break only shows here once it has PROPAGATED all the way up.";
+  if(k===levels.length-1) return "The bottom: the nucleus, fast and local. This is the only level that reads the external world; its pick becomes the evidence for the level above. A fill break here oscillates fast and is usually CONTAINED -- low-passed by the slow levels above before it reaches the top (ADHD-like).";
+  return "Level n-"+k+": a middle contest, reading the level below and feeding the one above, on a clock between fast (bottom) and slow (top). Damp it well and it absorbs a break from below; weaken it and the break passes through.";
 }
 function setView(k){
   viewLevel=k; pHist.length=0;   // whisker history is per level; reset on switch
   Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", +b.dataset.layer===k); });
   el("layerNote").textContent=viewNote(k);
+  var kpi=el("s_kP"); if(kpi){ kpi.value=levels[viewLevel].kP; el("v_kP").textContent=f2(levels[viewLevel].kP); }  // kP follows the viewed level
   resizeAll();
 }
 Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setView(+b.dataset.layer); }; });
@@ -700,42 +716,51 @@ el("ch").onclick=function(ev){
 // per-level dominance H and tracking error plus the organism fill F.
 function advance(){
   var steps=Math.max(1,Math.round(P.substeps*speed));   // speed scales throughput, dt stays fixed (stable)
-  for(var st=0; st<steps; st++){ t+=P.dt; stepStack(levels, fill, P, evidence(t), P.dt); }
-  var y=evidence(t);
-  for(var k=0;k<levels.length;k++){
-    var tg = (k===0) ? y : levels[k-1].m;
+  for(var st=0; st<steps; st++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }
+  var y=evidence(t), L=levels.length;
+  for(var k=0;k<L;k++){
+    var tg = (k===L-1) ? y : levels[k+1].m;        // evidence flows up: bottom reads world
     buf.H[k].push(herfindahl(levels[k].p));
     buf.err[k].push(dist(levels[k].m, tg));
-    if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); }
+    buf.F[k].push(levels[k].F);
+    if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); buf.F[k].shift(); }
   }
-  buf.F.push(fill.F); if(buf.F.length>BUFLEN) buf.F.shift();
   // recent share vectors of the viewed level, for the per-bar range whiskers
   pHist.push(Array.prototype.slice.call(levels[viewLevel].p)); if(pHist.length>PHIST) pHist.shift();
-  // recent (p,rho) of every bid across the stack, for the bid-map density trail:
-  // the cloud builds up where the environment's feedback keeps the bids
-  var snap=new Float64Array(levels.length*P.n*2);
-  for(var lk=0;lk<levels.length;lk++){ var lp=levels[lk].p, lr=levels[lk].rho; for(var li=0;li<P.n;li++){ var bx=(lk*P.n+li)*2; snap[bx]=lp[li]; snap[bx+1]=lr[li]; } }
+  // recent (p,rho) of every bid across the stack, for the bid-map density trail
+  var snap=new Float64Array(L*P.n*2);
+  for(var lk=0;lk<L;lk++){ var lp=levels[lk].p, lr=levels[lk].rho; for(var li=0;li<P.n;li++){ var bx=(lk*P.n+li)*2; snap[bx]=lp[li]; snap[bx+1]=lr[li]; } }
   bidHist.push(snap); if(bidHist.length>BIDHIST) bidHist.shift();
-  // early-warning + classifier run on the collated top level
-  ewsH.push(buf.H[0][buf.H[0].length-1]); ewsF.push(fill.F);
+  // early-warning + classifier run on the collated TOP level (levels[0]) and its fill
+  ewsH.push(buf.H[0][buf.H[0].length-1]); ewsF.push(levels[0].F);
   if(ewsH.length>P.ewsWin){ ewsH.shift(); ewsF.shift(); }
 }
+// how many levels are currently oscillating (fill amplitude over threshold):
+// the quantitative form of severity / propagation depth
+function propagationDepth(){ var d=0; for(var k=0;k<levels.length;k++){ if(rollAmp(buf.F[k])>P.propThresh) d++; } return d; }
 
 function rollAmp(arr){ if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
 function rollMean(arr){ if(!arr.length) return 0; var s=0,n=0; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ s+=arr[i]; n++; } return s/n; }
 
 function updateDiag(){
-  // headline regime: the collated TOP level (the organism) + the organism fill
-  var Htop=rollMean(buf.H[0]), errTop=rollMean(buf.err[0]), ampF=rollAmp(ewsF);
-  var reg=classify({H:Htop, F:fill.F, err:errTop, ampF:ampF}, P);
+  // Headline, collated across the stack to the parts that matter for each regime:
+  // division (collapse/scatter/tracking) is current-level, read at the fast
+  // bottom nucleus; fill (oscillation/flood/starve) is the mood, read at the slow
+  // top where a break only registers once it has propagated up.
+  var L=levels.length, bi=L-1;
+  var topF=levels[0].F, ampF=rollAmp(ewsF);
+  var Hbot=rollMean(buf.H[bi]), errBot=rollMean(buf.err[bi]);
+  var reg=classify({H:Hbot, F:topF, err:errBot, ampF:ampF}, P);
   var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
   // readout leads with the individual register (averages are not the point);
-  // a little context (which level, the organism mood) and the early-warning footer.
+  // context (level, mood), break propagation, and the early-warning footer.
   var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
-  var moodTag = fill.F>P.Fstar+P.band?" manic" : fill.F<P.Fstar-P.band?" low" : " in band";
+  var moodTag = topF>P.Fstar+P.band?" manic" : topF<P.Fstar-P.band?" low" : " in band";
+  var dep=propagationDepth();
   var rows=[
     ["viewing", levelName(viewLevel)],
-    ["mood F", fill.F.toFixed(2)+moodTag, (fill.F>P.Fstar+P.band||fill.F<P.Fstar-P.band)]
+    ["mood F (top)", topF.toFixed(2)+moodTag, (topF>P.Fstar+P.band||topF<P.Fstar-P.band)],
+    ["break depth", dep+" / "+levels.length+" levels", dep>1]
   ];
   if(sel>=0 && sel<P.n){
     var lv=levels[viewLevel];
@@ -771,7 +796,7 @@ function render(){
     setCap('bids <span class="sub">win share x epistemic rating; click one to open the clock</span>');
   }
   drawDivision(el("div"), lv);
-  drawFill(el("fill"), fill, P);
+  drawFill(el("fill"), lv, P);   // the viewed level's own fill
   drawTraces(el("tr"), buf, P, viewLevel);
   updateDiag();
 }
@@ -784,7 +809,7 @@ function loop(){
 function warmup(){
   // settle the stack, then pre-fill the scrolling buffers with settled samples,
   // so the trace opens already-settled instead of scrolling a cold-start curve.
-  for(var i=0;i<1200;i++){ t+=P.dt; stepStack(levels, fill, P, evidence(t), P.dt); }
+  for(var i=0;i<1200;i++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }
   for(i=0;i<BUFLEN;i++) advance();
 }
 setView(0);

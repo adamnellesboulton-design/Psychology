@@ -83,19 +83,33 @@ this level swinging between the two poles.
 ## Layers (the nested stack)
 
 The model is not one contest but a **stack of nested allocator contests**, one
-per scale: level _n_ at the top, then _n−1_, down to **cellular** at the
-bottom. Each level is a live contest with its own coalitions, division and
-consensus. Coupling is **top-down**: the top level tracks the external world,
-and every level below chases its parent's pick (`m`) as its own target — a
-subordinate contest realizing the level above, one scale finer. The four
-controls act at **every** scale, so a malfunction or miscalibration cascades
-down the whole stack (drive `G` high and every level collapses, not just the
-top).
+per scale: level _n_ at the top, then _n−1_, down to the **cellular** nucleus at
+the bottom. Coupling is **bottom-up**: only the bottom reads the external world;
+every level above reads the level below (its pick `m` as evidence, its fill `F`
+as a disturbance). **Clocks lengthen upward** — the bottom is fast and local,
+the top is slow and global (mood). Each level has its **own fill** with its own
+damping `kP`.
 
-The top level is the **collated headline**: the regime label is read there. The
-layer picker (level n / n−1 / n−2 / cellular) drills the panels into any level
-so you can watch that scale's own contest and how well it tracks the one above.
-The fill `F` (organism mood) is shared across the stack.
+The layer picker (level n / n−1 / n−2 / cellular) drills the panels into any
+level; `kP` is set on whichever level you're viewing.
+
+### Bipolar and ADHD are one break at two depths
+
+Drop a level's fill damping (`kP → 0`) — the same lesion — and watch where it
+lands:
+
+- **At the bottom, levels above intact** → the slow upper levels low-pass the
+  fast oscillation and absorb it. **Contained**: fast, local, never reaches the
+  top (ADHD-like). The headline stays healthy; drill to the bottom to see it
+  swing.
+- **At the top** (or low with the upper levels also weakened) → it reaches the
+  slow global level: a full, slow mood swing. **Propagated**: the headline reads
+  *fill oscillating* (bipolar).
+
+Same Hopf fingerprint, contained or propagated by depth. The **break depth**
+readout (how many levels are oscillating) is the quantitative form of severity.
+The division pair (schizophrenia/autism) is **not** reframed this way — it's a
+current-level quantity, read at the nucleus.
 
 ## Notes
 
