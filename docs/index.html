@@ -737,9 +737,25 @@ function advance(){
 }
 // how many levels are currently oscillating (fill amplitude over threshold):
 // the quantitative form of severity / propagation depth
-function propagationDepth(){ var d=0; for(var k=0;k<levels.length;k++){ if(rollAmp(buf.F[k])>P.propThresh) d++; } return d; }
+function propagationDepth(){ var d=0; for(var k=0;k<levels.length;k++){ if(fillOsc(k)>P.propThresh) d++; } return d; }
 
-function rollAmp(arr){ if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
+function rollAmp(arr, win){ win=win||120; if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-win);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
+// fill OSCILLATION at level k over a long window (slow upper swings need it):
+// amplitude gated by large ALTERNATIONS across a band, so neither a one-time
+// ramp (a flood settling, a control change -> one-sided, no alternation) nor
+// small noise (never reaches the band) is mistaken for a sustained limit cycle.
+function fillOsc(k){
+  var a=buf.F[k], n=a.length, win=800; if(n<32) return 0;
+  var s=Math.max(0,n-win), cnt=n-s, m=0, i, lo=1e9, hi=-1e9, v;
+  for(i=s;i<n;i++){ v=a[i]; m+=v; if(v<lo)lo=v; if(v>hi)hi=v; }
+  m/=cnt;
+  var amp=(hi-lo)/2; if(amp<P.propThresh) return 0;
+  var band=0.4*amp, state=0, alt=0;
+  for(i=s;i<n;i++){ var d=a[i]-m;
+    if(d>band){ if(state<0) alt++; state=1; }
+    else if(d<-band){ if(state>0) alt++; state=-1; } }
+  return alt>=3 ? amp : 0;   // repeated swings to both sides = a real oscillation
+}
 function rollMean(arr){ if(!arr.length) return 0; var s=0,n=0; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ s+=arr[i]; n++; } return s/n; }
 
 function updateDiag(){
@@ -748,7 +764,7 @@ function updateDiag(){
   // bottom nucleus; fill (oscillation/flood/starve) is the mood, read at the slow
   // top where a break only registers once it has propagated up.
   var L=levels.length, bi=L-1;
-  var topF=levels[0].F, ampF=rollAmp(ewsF);
+  var topF=levels[0].F, ampF=fillOsc(0);          // top fill amplitude, long window
   var Hbot=rollMean(buf.H[bi]), errBot=rollMean(buf.err[bi]);
   var reg=classify({H:Hbot, F:topF, err:errBot, ampF:ampF}, P);
   var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
