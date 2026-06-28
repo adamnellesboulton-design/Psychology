@@ -368,9 +368,6 @@ function drawChannel(cv, lv, target, isTop){
     ctx.fillText(String(i+1), cx+u[i][0]*R*0.82, cy-u[i][1]*R*0.82);
   }
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-  // yhat (the discounted target this level actually scores against), faint
-  ctx.strokeStyle="rgba(200,182,90,.7)"; ctx.lineWidth=1.5;
-  var yh=s.yhat; ctx.beginPath(); ctx.arc(X(yh),Y(yh),5,0,2*Math.PI); ctx.stroke();
   // the target: the world (top level) or the level above's pick (cyan ring)
   ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(X(y),Y(y),7,0,2*Math.PI); ctx.stroke();
@@ -392,6 +389,10 @@ function drawChannel(cv, lv, target, isTop){
     ctx.fillStyle="rgba(54,182,200,.7)"; ctx.font="9px monospace"; ctx.textAlign="center";
     ctx.fillText("gap = error", mxp, myp-6);
   }
+  // how to read the constellation: angle = which option, distance from the
+  // center = how committed (centre = undecided/spread, rim = all-in on one).
+  ctx.fillStyle="#46586a"; ctx.font="9px monospace"; ctx.textAlign="center";
+  ctx.fillText("angle = which option    center -> rim = undecided -> committed", w/2, h-6);
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
 }
 
@@ -467,19 +468,24 @@ function drawDivision(cv, lv){
     ctx.fillStyle = i===win ? "#aac2d4" : "#5d7180"; ctx.font="9px monospace"; ctx.textAlign="center";
     ctx.fillText(String(i+1), pad+i*bw+bw/2, base+H+11);
   }
-  // epistemic rating per coalition (precision rho), the "range of real" that the
-  // averaging into m hides: an olive profile laid over the win bars. A flat
-  // profile = precision frozen (autism); a jagged one = chasing noise (ADHD).
-  ctx.strokeStyle="rgba(200,182,90,.55)"; ctx.lineWidth=1.5; ctx.beginPath();
-  for(i=0;i<n;i++){ var rx=pad+i*bw+bw/2, ry=base+H*(1-Math.min(1,s.rho[i]/P.rho0)); if(i===0)ctx.moveTo(rx,ry); else ctx.lineTo(rx,ry); }
-  ctx.stroke();
-  for(i=0;i<n;i++){ var rx2=pad+i*bw+bw/2, ry2=base+H*(1-Math.min(1,s.rho[i]/P.rho0)); ctx.fillStyle="#c8b65a"; ctx.beginPath(); ctx.arc(rx2,ry2,2.4,0,2*Math.PI); ctx.fill(); }
+  // each bar is a snapshot, so show its recent RANGE as a whisker (min..max of
+  // that coalition's share over the window). A tall whisker = a share that swings
+  // (churn); a short one = steady. This makes a bar a distribution, not a point.
+  if(pHist.length>4){
+    ctx.strokeStyle="rgba(214,230,242,.45)"; ctx.lineWidth=1;
+    for(i=0;i<n;i++){
+      var lo=1, hi=0; for(var tt=0;tt<pHist.length;tt++){ var v=pHist[tt][i]; if(v<lo)lo=v; if(v>hi)hi=v; }
+      var cxw=pad+i*bw+bw/2, yhi=base+H*(1-hi), ylo=base+H*(1-lo);
+      ctx.beginPath(); ctx.moveTo(cxw,yhi); ctx.lineTo(cxw,ylo);
+      ctx.moveTo(cxw-3,yhi); ctx.lineTo(cxw+3,yhi); ctx.moveTo(cxw-3,ylo); ctx.lineTo(cxw+3,ylo); ctx.stroke();
+    }
+  }
   // mark the leader
   ctx.fillStyle="#cfe0ec"; ctx.font="9px monospace"; ctx.textAlign="center";
   ctx.fillText("winner", pad+win*bw+bw/2, base+H-H*s.p[win]-5);
   ctx.textAlign="left";
   ctx.fillStyle="#7d8f9c"; ctx.font="10px monospace";
-  ctx.fillText("bars = wins | olive = epistemic rho | click a column to inspect", 10, h-4);
+  ctx.fillText("bar = share now | whisker = its recent range | click to inspect", 10, h-4);
 }
 
 function drawFill(cv, s, P){   // s = the organism fill {F, Fset}
@@ -589,6 +595,7 @@ var BUFLEN=4200;
 var buf={F:[], H:[], err:[]};       // H[k], err[k] are arrays per level
 for(var _b=0;_b<P.levels;_b++){ buf.H.push([]); buf.err.push([]); }
 var ewsH=[], ewsF=[];
+var pHist=[], PHIST=120;            // recent share vectors of the VIEWED level (for bar whiskers)
 
 function el(id){ return document.getElementById(id); }
 
@@ -630,7 +637,7 @@ function viewNote(k){
   return "Level n-"+k+", a subordinate contest. Its world is the pick (m) of the level above; it runs the same allocator dynamics one scale finer. A control set wrong is wrong at every scale.";
 }
 function setView(k){
-  viewLevel=k;
+  viewLevel=k; pHist.length=0;   // whisker history is per level; reset on switch
   Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", +b.dataset.layer===k); });
   el("layerNote").textContent=viewNote(k);
   resizeAll();
@@ -682,6 +689,8 @@ function advance(){
     if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); }
   }
   buf.F.push(fill.F); if(buf.F.length>BUFLEN) buf.F.shift();
+  // recent share vectors of the viewed level, for the per-bar range whiskers
+  pHist.push(Array.prototype.slice.call(levels[viewLevel].p)); if(pHist.length>PHIST) pHist.shift();
   // early-warning + classifier run on the collated top level
   ewsH.push(buf.H[0][buf.H[0].length-1]); ewsF.push(fill.F);
   if(ewsH.length>P.ewsWin){ ewsH.shift(); ewsF.shift(); }
