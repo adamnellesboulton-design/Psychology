@@ -27,7 +27,9 @@ of competing coalitions bid to explain it. Two things evolve:
 
 The **channel** view plots the coalition directions `u`, the world `y` (blue),
 and the system's shared state `m` (amber) — its current best guess. Healthy
-means `m` tracks `y`. The **traces** scroll `F`, `H` and the tracking error,
+means `m` tracks `y`. The estimate carries a small per-tick wobble (`sigmaM`),
+an irreducible epistemic uncertainty: the system is never perfectly sure where
+things stand. The **traces** scroll `F`, `H` and the tracking error,
 and the **readout** prints the order parameters plus rolling early-warning
 signals (lag-1 autocorrelation and variance — the generic precursors of a fold
 or a Hopf bifurcation).

@@ -201,6 +201,7 @@ var CONFIG = {
   sigmaF:0.035,       // always-on environmental noise on the fill (the "randomness")
   sigmaPi:0.015,      // small noise in the contest so winners can be unseated
   sigmaY:0.20,        // observation noise on the evidence; a short horizon chases it (ADHD)
+  sigmaM:0.02,        // epistemic uncertainty: per-tick wobble in the system's estimate m
   // diagnostics thresholds (one place; tunable)
   band:0.40,          // euthymic half-band on F
   H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45,
@@ -237,10 +238,13 @@ function step(s, P, u, y, dt){
   var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
   s.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-s.yhat[0]);
   s.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-s.yhat[1]);
-  // shared state m (precision-weighted consensus)
+  // shared state m (precision-weighted consensus), plus a per-tick epistemic
+  // wobble: the system's estimate of where things stand is never perfectly
+  // certain, so it jitters by sigmaM each tick (epistemological uncertainty).
   var mx=0,my=0,w=0;
   for(var i=0;i<n;i++){ var wi=s.p[i]*s.rho[i]; mx+=wi*u[i][0]; my+=wi*u[i][1]; w+=wi; }
   mx/=w; my/=w;
+  mx+=P.sigmaM*randn(); my+=P.sigmaM*randn();
   // payoffs
   var pibar=0;
   for(i=0;i<n;i++){
