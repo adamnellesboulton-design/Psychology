@@ -291,7 +291,13 @@ function stepDivision(lv, P, y, dt){
 function stepFill(lv, P, belowF, dt){
   var Fset=P.Fstar*(1+P.envGain*P.env);
   var theta=P.theta0 + lv.kP*(lv.F-Fset) + P.kI*lv.z;
-  var disturb = (belowF===null) ? 0 : P.couple*(belowF - Fset);
+  // a level RELAYS the disturbance from below in proportion to how undamped it
+  // is: a healthy (well-damped) level absorbs it (gate ~0) so a break below is
+  // contained; a weakened level (kP -> 0) passes it on, so the break propagates
+  // up only through levels that are themselves weak. Containment is thus a
+  // property of kP, the same dial as the break.
+  var gate = Math.max(0, Math.min(1, 1 - lv.kP/P.kP));
+  var disturb = (belowF===null) ? 0 : P.couple*(belowF - Fset)*gate;
   var dF=lv.F*(P.a*lv.pibar - theta + P.sigmaF*randn() + disturb);
   lv.F=Math.max(0, lv.F + dt*dF);
   lv.z=Math.max(-P.zClamp, Math.min(P.zClamp, lv.z + dt*(lv.F-Fset)));   // anti-windup
@@ -736,9 +742,10 @@ function advance(){
   ewsH.push(buf.H[0][buf.H[0].length-1]); ewsF.push(levels[0].F);
   if(ewsH.length>P.ewsWin){ ewsH.shift(); ewsF.shift(); }
 }
-// how many levels are currently oscillating (fill amplitude over threshold):
-// the quantitative form of severity / propagation depth
-function propagationDepth(){ var d=0; for(var k=0;k<levels.length;k++){ if(fillOsc(k)>P.propThresh) d++; } return d; }
+// the highest level (toward the top) a fill break has reached. -1 = no break.
+// The higher it reaches, the more severe: a break that only touches the bottom
+// is contained/local; one that reaches the top is a global mood swing (bipolar).
+function breakReach(){ for(var k=0;k<levels.length;k++){ if(fillOsc(k)>P.propThresh) return k; } return -1; }
 
 function rollAmp(arr, win){ win=win||120; if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-win);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
 // fill OSCILLATION at level k over a long window (slow upper swings need it):
@@ -773,11 +780,12 @@ function updateDiag(){
   // context (level, mood), break propagation, and the early-warning footer.
   var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
   var moodTag = topF>P.Fstar+P.band?" manic" : topF<P.Fstar-P.band?" low" : " in band";
-  var dep=propagationDepth();
+  var reach=breakReach();
+  var breakTag = reach<0 ? "none" : (reach===0 ? "PROPAGATED to top" : "contained @ "+(reach===levels.length-1?"bottom":"n-"+reach));
   var rows=[
     ["viewing", levelName(viewLevel)],
     ["mood F (top)", topF.toFixed(2)+moodTag, (topF>P.Fstar+P.band||topF<P.Fstar-P.band)],
-    ["break depth", dep+" / "+levels.length+" levels", dep>1]
+    ["fill break", breakTag, reach===0]
   ];
   if(sel>=0 && sel<P.n){
     var lv=levels[viewLevel];
