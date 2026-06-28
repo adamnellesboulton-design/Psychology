@@ -189,7 +189,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 // ===========================================================================
 var CONFIG = {
   n:8, dt:0.01, substeps:8, levels:4,   // nested stack depth: level n .. cellular
-  eta:2.4, lambda:2.0, c:1.4,
+  eta:2.4, etaDepth:1.8, lambda:2.0, c:1.4,   // etaDepth: migration speeds up per level down
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
   delta:0.6, phi:1.0,
   s:0.8, rho0:1.0, rhoMin:0.05,
@@ -241,9 +241,12 @@ var _pi=null, _dp=null, _drho=null;
 function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _dp=new Float64Array(n); _drho=new Float64Array(n);} }
 
 // one division contest at one level, tracking target y (the world for the top
-// level, the parent's consensus for the rest)
-function stepDivision(lv, P, y, dt){
+// level, the parent's consensus for the rest). eta is the migration rate (how
+// fast the field reconfigures); deeper levels run faster so they lock onto their
+// parent's pick tightly.
+function stepDivision(lv, P, y, dt, eta){
   var n=P.n, u=lv.u; ensureScratch(n);
+  if(eta===undefined) eta=P.eta;
   // discounted evidence (horizon set by the discount rate); a short horizon
   // chases the noisy observation (ADHD).
   var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
@@ -263,7 +266,7 @@ function stepDivision(lv, P, y, dt){
     pibar+=lv.p[i]*_pi[i];
   }
   for(i=0;i<n;i++){
-    _dp[i]=P.eta*lv.p[i]*(_pi[i]-pibar);
+    _dp[i]=eta*lv.p[i]*(_pi[i]-pibar);
     var ddy2=(u[i][0]-lv.yhat[0])*(u[i][0]-lv.yhat[0])+(u[i][1]-lv.yhat[1])*(u[i][1]-lv.yhat[1]);
     var rhoT=P.rho0*Math.exp(-ddy2/(P.s*P.s));
     _drho[i]=P.phi*(rhoT-lv.rho[i]);
@@ -291,7 +294,7 @@ function stepFill(fl, P, pibar, dt){
 function stepStack(levels, fl, P, y, dt){
   for(var k=0;k<levels.length;k++){
     var target = (k===0) ? y : levels[k-1].m;
-    stepDivision(levels[k], P, target, dt);
+    stepDivision(levels[k], P, target, dt, P.eta*Math.pow(P.etaDepth, k));  // faster with depth
   }
   stepFill(fl, P, levels[0].pibar, dt);
 }
