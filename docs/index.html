@@ -495,8 +495,9 @@ function evidence(time){
   return [P.yR*Math.cos(0.05*time)+yJump[0], P.yR*Math.sin(0.063*time)+yJump[1]];
 }
 
-// rolling buffers
-var BUFLEN=420;
+// rolling buffers. A long trace history so a regime has room to play out
+// (several bipolar cycles, the slow evidence wander) before it scrolls off.
+var BUFLEN=4200;
 var buf={F:[],H:[],err:[]};
 var ewsH=[], ewsF=[];
 
