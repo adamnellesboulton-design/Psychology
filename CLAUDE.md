@@ -36,8 +36,13 @@ of the script. Retune there; nothing is hard-coded elsewhere.
   noise.
 - **Precision `rho`** — outer loop, relaxes toward an evidence-fit target at
   rate `phi`.
-- **Evidence** — a slow Lissajous wander at radius `yR`; `delta` sets the
-  discount horizon `tau` over which `yhat` smooths it.
+- **Evidence** — a slow Lissajous wander at radius `yR`; `delta` sets the bar's
+  averaging clock `tau` (`tau = tauMin + (tauMax-tauMin)*delta`). One time
+  constant, two jobs: the scoring/evidence horizon over which `yhat` smooths the
+  target, AND, in the multi-level build, the window over which a level averages
+  the one below. Short `tau` chases the instant (ADHD). `delta` is the bar's
+  clock; `kP` is its damping — bipolar and ADHD are the two faults of the one
+  homeostat (siblings, not the same break).
 
 ### The four controls → regimes
 
@@ -45,17 +50,19 @@ of the script. Retune there; nothing is hard-coded elsewhere.
 |---|---|---|
 | `G` integrating gain | malfunction | high → division collapses (frozen monopoly); low → disorganised |
 | `kP` homeostat damping | malfunction | → 0 → fill oscillates (limit cycle) |
-| `delta` discount rate | miscalibration | short → chases noise (ADHD) — subtle, trace-level |
+| `delta` bar's averaging clock | miscalibration | short → chases noise (ADHD); governs scoring horizon + bar memory — subtle, trace-level |
 | `phi` precision flexibility | miscalibration | → 0 → rigid after a context shift (autism) — subtle, trace-level |
 
 Plus the environment: `env` > 0 floods, `env` < 0 starves.
 
-Note (multi-level): this table and the malfunction/miscalibration split are the
-single-level view. The recursion section below reexamines the fill pair, bipolar
-and ADHD, as one break at two depths, contained versus propagated, rather than
-two separate controls. Keep both views runnable so they can be compared; in
-particular keep the discount-rate control and the existing ADHD preset. The
-division pair, schizophrenia and autism, is not reframed this way.
+Note (the one homeostat): bipolar and ADHD are the two faults of the single fill
+homeostat — `kP` is its damping, `delta` is its averaging clock. Siblings, not
+the same break. The multi-level recursion section below is a **bipolar-only**
+demonstration: it shows the damping break (`kP -> 0`) propagating up the levels,
+contained versus propagated, as a *severity* axis. It is NOT the ADHD mechanism
+(do not frame ADHD as a contained fill oscillation). ADHD stays the clock fault
+(`delta` short, preset `delta = 0.08`). The division pair, schizophrenia and
+autism, is separate again (`G`, `phi`).
 
 ### Classifier
 
@@ -75,13 +82,14 @@ each regime: division (collapse/scatter/tracking) at the fast bottom nucleus
 (division is a current-level quantity), fill (oscillation/flood/starve) at the
 slow top, where a break only registers once it has propagated up.
 
-## The recursive stack (multi-level), and breaks as propagation
+## The recursive stack (multi-level): bipolar as propagating severity
 
 This wraps the single-level core above; it replaces none of it. The same contest
-runs at several levels (`n`, `n-1`, `n-2`, bottom). Couple them as the recursion
-requires, then add one perturbation that demonstrates the central clinical
-claim: the fill-disorders are one break at different depths, not separate
-controls.
+runs at several levels (`n`, `n-1`, `n-2`, bottom). It is a **bipolar-only**
+demonstration: the damping break (`kP -> 0`) injected at a level either stays
+contained or propagates up the stack — a *severity* axis. This is NOT the ADHD
+mechanism. ADHD is the bar's clock fault (`delta` short) and is not reframed by
+depth.
 
 ### Coupling the levels (this is the architecture; get it exact)
 Run the identical `step()` core at each level `N`. Not independent stacked
@@ -101,17 +109,17 @@ copies; each reads the one beneath:
 - **Bottom is the nucleus.** Lowest level where the bar comes alive; below it a
   fixed sieve, do not recurse past it.
 
-### The break, and containment (the new demonstration)
+### The break, and containment (severity, bipolar only)
 Inject loss of fill damping (`kP -> 0`) as a lesion at a chosen level `N`. Watch
 whether the oscillation is contained or propagates up.
-- Break **low with intact levels above**: a well-damped upper level low-passes
-  the oscillating throughput from below, absorbing it. Fast, bounded, local,
-  never reaches the top. **Contained** (ADHD-like).
+- Break **low with intact levels above**: a well-damped, slower upper level
+  low-passes the oscillating throughput from below, absorbing it. Fast, bounded,
+  local, never reaches the top. **Contained** (mild / sub-clinical bipolar).
 - Break **at/near the top**, or low **with upper levels also weakened**: reaches
-  the slow global level, full sustained swing. **Propagated** (bipolar-like).
-- **Same break.** Identical Hopf fingerprint (rising variance, dominant
-  frequency, critical slowing), fast/small when contained, slow/large when
-  propagated. Show it at the injected level **and** the top, side by side.
+  the slow global level, full sustained swing. **Propagated** (full bipolar).
+- **Same break, depth = severity.** Identical Hopf fingerprint, fast/small when
+  contained, slow/large when propagated. This is one disorder (bipolar) at
+  different severities, NOT bipolar-vs-ADHD.
 
 In the build: `kP` is per level, set on the currently viewed level (drill the
 layer picker, drop `kP` there). Inject at the bottom with healthy levels above ->
@@ -122,14 +130,15 @@ upward fill coupling plus the slower upper clocks supply the low-pass, so a
 fast break from below is absorbed by the slow levels above.
 
 ### What this asserts, and what it does not (hold this line)
-- **Keep `delta`.** Discount/horizon stays as in the core. Do not delete it,
-  merge it into the homeostat timescale, or drop the control count.
-- **Keep the four-control table.** `ADHD = short delta` stays. The multi-level
-  mode lets you **compare** it against "ADHD as contained fill oscillation," not
-  replace it.
+- **`delta` IS the bar's averaging clock** — one `tau` for the scoring horizon
+  and the inter-level averaging window. (The earlier guard "keep delta separate,
+  do not merge into the homeostat timescale" is VOID; this merge is by design.)
+- **ADHD = short `delta`** (bar's clock), the sibling of bipolar (`kP`, damping).
+  Do NOT frame ADHD as a contained fill oscillation; the containment demo is
+  bipolar-only severity.
 - **Do not wire the division pair into propagation.** Schizophrenia/autism
   aren't claimed to reduce by containment; the division is a current-level
-  quantity. Leave them on the single-level controls.
+  quantity. Leave them on the single-level controls (`G`, `phi`).
 
 ## Design decisions baked in (do not regress without being asked)
 

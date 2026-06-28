@@ -53,7 +53,7 @@ Grouped into the two kinds of fault.
 
 | Control | Healthy | Driven out of range |
 |---|---|---|
-| **Discount rate `δ`** | 0.6 | Too short → the horizon chases the instant and never holds a thread (*ADHD*). |
+| **Averaging clock `δ`** | 0.6 | The bar's clock — the horizon a level scores evidence over and averages the level below. Too short → chases the instant, never holds a thread (*ADHD*). Sibling of `kP`: the two faults of the one homeostat (clock vs damping). |
 | **Precision flexibility `φ`** | 1.0 | → 0 precision freezes; the system is slow to re-weight after a context shift (*autism*). |
 
 The two malfunctions produce **gross, named state changes** you can read off the
@@ -93,23 +93,26 @@ damping `kP`.
 The layer picker (level n / n−1 / n−2 / cellular) drills the panels into any
 level; `kP` is set on whichever level you're viewing.
 
-### Bipolar and ADHD are one break at two depths
+### Bipolar as propagating severity
 
-Drop a level's fill damping (`kP → 0`) — the same lesion — and watch where it
-lands:
+Bipolar and ADHD are the two faults of the one fill homeostat — **`kP` is its
+damping, `delta` is its averaging clock** — siblings, not the same break. The
+multi-level stack adds a **severity** axis to *bipolar*: drop a level's fill
+damping (`kP → 0`) and watch how far it spreads.
 
-- **At the bottom, levels above intact** → the slow upper levels low-pass the
-  fast oscillation and absorb it. **Contained**: fast, local, never reaches the
-  top (ADHD-like). The headline stays healthy; drill to the bottom to see it
+- **At the bottom, levels above intact** → the slower, well-damped upper levels
+  low-pass the fast oscillation and absorb it. **Contained**: local, never
+  reaches the top. The headline stays healthy; drill to the bottom to see it
   swing.
 - **At the top** (or low with the upper levels also weakened) → it reaches the
   slow global level: a full, slow mood swing. **Propagated**: the headline reads
-  *fill oscillating* (bipolar).
+  *fill oscillating* (full bipolar).
 
-Same Hopf fingerprint, contained or propagated by depth. The **break depth**
-readout (how many levels are oscillating) is the quantitative form of severity.
-The division pair (schizophrenia/autism) is **not** reframed this way — it's a
-current-level quantity, read at the nucleus.
+Same Hopf, contained or propagated by depth. The **break depth** readout (how
+many levels are oscillating) is the quantitative form of severity. This is one
+disorder at different severities, *not* bipolar-vs-ADHD. ADHD stays the clock
+fault (`delta` short); the division pair (schizophrenia/autism) is separate,
+read at the nucleus.
 
 ## Notes
 

@@ -252,8 +252,9 @@ function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _d
 // level's clock, so upper levels reconfigure slower.
 function stepDivision(lv, P, y, dt){
   var n=P.n, u=lv.u; ensureScratch(n);
-  // discounted evidence (horizon set by the discount rate); a short horizon
-  // chases the noisy observation (ADHD).
+  // the bar's averaging clock tau (set by delta): one time constant doing two
+  // jobs -- the horizon a level scores evidence over, AND the window it averages
+  // the level below across. Short tau chases the noisy instant (ADHD).
   var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
   lv.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-lv.yhat[0]);
   lv.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-lv.yhat[1]);
@@ -660,7 +661,7 @@ function slider(host, key, label, sym, fmt, hint){
 var f2=function(x){return x.toFixed(2);};
 slider(el("ctl-G"),"G","Integrating gain","G",f2,"too high: winner freezes, decouples from y (delusion). too low: winner wanders (disorganized).");
 slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). To 0: the fill loses its damping and swings (the break). Inject at the top -> propagates (bipolar); at the bottom -> contained (ADHD-like). The swing low-passes up the slow stack.");
-slider(el("ctl-delta"),"delta","Discount rate","d",f2,"too short: chases the instant, never holds a thread (ADHD).");
+slider(el("ctl-delta"),"delta","Averaging clock","d",f2,"the bar's clock: the horizon a level scores evidence over and averages the level below. Too short: chases the instant, never holds a thread (ADHD). Sibling of kP -- the two faults of the one homeostat (clock vs damping).");
 slider(el("ctl-phi"),"phi","Precision flexibility","phi",f2,"toward 0: precision frozen, slow to re-track after a context shift (autism).");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
