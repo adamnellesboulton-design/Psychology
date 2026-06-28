@@ -190,7 +190,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 var CONFIG = {
   n:8, dt:0.01, substeps:8, levels:4,   // nested stack depth: level n .. cellular
   eta:2.4, lambda:2.0, c:1.4,
-  clockSlow:0.7,      // each level up runs this factor slower (timescale separation)
+  clockSlow:0.82,     // each level up runs this factor slower (timescale separation)
   couple:0.45,        // how strongly a level's fill is disturbed by the level below's
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
   delta:0.6, phi:1.0,
@@ -745,7 +745,7 @@ function rollAmp(arr, win){ win=win||120; if(arr.length<8) return 0; var lo=Infi
 // ramp (a flood settling, a control change -> one-sided, no alternation) nor
 // small noise (never reaches the band) is mistaken for a sustained limit cycle.
 function fillOsc(k){
-  var a=buf.F[k], n=a.length, win=800; if(n<32) return 0;
+  var a=buf.F[k], n=a.length, win=1500; if(n<32) return 0;
   var s=Math.max(0,n-win), cnt=n-s, m=0, i, lo=1e9, hi=-1e9, v;
   for(i=s;i<n;i++){ v=a[i]; m+=v; if(v<lo)lo=v; if(v>hi)hi=v; }
   m/=cnt;
