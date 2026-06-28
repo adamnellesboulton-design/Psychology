@@ -3,1183 +3,566 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Allocator Toy Model</title>
+<title>Allocator -- one channel, four controls</title>
 <!--
-  This page runs the allocator toy model entirely in the browser: no server, no
-  build step, no dependencies. It is a faithful JavaScript port of the update
-  rule in allocator_toy.py; if you change the model there, change it here too.
-  It works opened straight from disk (file://) and hosted on GitHub Pages alike.
+  Single-channel allocator instrument. A crowd of coalitions bids for one serial
+  broadcast channel, governed by four controls. The psychiatric regimes are not
+  separate models; they are this one model driven out of its healthy range.
+
+  Self-contained, buildless, zero dependencies. Runs from file:// or any static
+  host (this is what GitHub Pages serves). The model lives in the MODEL section
+  below and is the single source of dynamics. See CLAUDE.md for the spec.
+
+  House style: no em or en dashes in UI text, straight quotes, American spelling.
 -->
 <style>
-:root{--bg:#f6f7f9;--panel:#fff;--ink:#1b1b1f;--muted:#6b6b76;--line:#e4e4ea;--accent:#2563eb;}
-*{box-sizing:border-box;}
-body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
-header{padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel);}
-header h1{margin:0;font-size:18px;}
-header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
-main{display:flex;gap:20px;padding:20px;align-items:flex-start;flex-wrap:wrap;}
-#controls{flex:0 0 330px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;}
-#out{flex:1 1 460px;min-width:360px;}
-.group{margin-bottom:18px;}
-.group > label{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
-.hint{color:var(--muted);font-size:12px;margin:8px 0 0;}
-.seg{display:flex;flex-wrap:wrap;gap:6px;}
-.seg button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink);}
-.seg button:hover{border-color:var(--accent);}
-.seg button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;}
-.slider{margin-bottom:12px;transition:opacity .15s;}
-.slider.dim{opacity:.38;}
-.slider .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
-.slider .name{font-size:12px;}
-.slider .val{font-size:12px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums;}
-input[type=range]{width:100%;accent-color:var(--accent);}
-.check{display:flex;align-items:center;gap:8px;font-size:13px;}
-.group > label.check{text-transform:none;letter-spacing:0;font-weight:400;font-size:13px;margin-bottom:0;}
-#plots{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;min-height:120px;}
-#plots svg{max-width:100%;height:auto;display:block;margin:0 auto 6px;}
-#dashboard{display:flex;flex-direction:column;gap:14px;}
-.dash-intro{background:#eef2ff;border:1px solid #dde3ff;border-radius:12px;padding:13px 18px;font-size:14px;line-height:1.55;color:#33333b;}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;border-left:4px solid #cdd6e6;}
-.card-field{border-left:4px solid #5bbd8e;background:#f6fbf8;}
-.card-layer{border-left:4px solid #8c6fd6;background:#f8f6fd;}
-.card-title{font-size:15px;font-weight:700;margin-bottom:6px;}
-.scope{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:10px;margin-right:9px;vertical-align:middle;}
-.scope-one{background:#eef1f6;color:#5a6b86;}
-.scope-field{background:#dcf1e7;color:#1f7a52;}
-.scope-layer{background:#eccae6;color:#7e3f86;}
-.scope-legend{font-size:12.5px;color:var(--muted);margin-top:9px;line-height:1.5;}
-.scope-legend .scope{margin-right:5px;}
-.card svg{max-width:100%;height:auto;display:block;margin:0 auto 4px;}
-.card-body{font-size:13.5px;line-height:1.55;color:#33333b;white-space:pre-wrap;margin-top:6px;}
-#advanced summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);outline:none;}
-#advanced[open] summary{margin-bottom:12px;}
-#mathBtn{margin-top:6px;width:100%;font:inherit;font-size:12px;padding:8px 10px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink);}
-#mathBtn:hover{border-color:var(--accent);color:var(--accent);}
-.modal{position:fixed;inset:0;background:rgba(20,20,28,.55);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50;}
-.modal[hidden]{display:none;}
-.modal-box{background:#fff;border-radius:14px;max-width:780px;width:100%;max-height:88vh;overflow:auto;padding:22px 26px;position:relative;}
-.modal-box h2{margin:0 0 4px;font-size:18px;}
-.modal-box .sub{color:var(--muted);font-size:13px;margin:0 0 14px;}
-.modal-close{position:absolute;top:14px;right:16px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 11px;cursor:pointer;font:inherit;font-size:12px;}
-#mathBody{font-family:Georgia,"Times New Roman","Cambria Math",serif;color:#1b1b1f;}
-#mathBody h4{font-family:-apple-system,Segoe UI,sans-serif;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:18px 0 6px;}
-#mathBody p{font-size:14px;line-height:1.55;margin:5px 0;}
-#mathBody .eq{font-size:17px;line-height:1.55;margin:8px 0 8px 14px;white-space:nowrap;overflow-x:auto;}
-#mathBody i{font-style:italic;}
-#mathBody sub,#mathBody sup{font-size:.72em;}
-#mathBody .note{font-family:-apple-system,Segoe UI,sans-serif;font-size:12.5px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;}
-#mathBody table.params{border-collapse:collapse;font-size:14px;margin:4px 0 2px 8px;}
-#mathBody table.params td{padding:3px 18px 3px 0;vertical-align:top;}
-#mathBody table.params td:first-child{font-style:italic;white-space:nowrap;}
-footer{padding:6px 24px 26px;color:var(--muted);font-size:12px;}
-footer code{font-family:ui-monospace,Menlo,Consolas,monospace;}
+:root{
+  --bg:#070b0f; --panel:#0c1219; --panel2:#0a0f15; --line:#16222c; --line2:#1e2e3a;
+  --ink:#9fb2c0; --ink-dim:#5d7180; --ink-bright:#d6e6f2;
+  --grid:#102029; --signal:#ffb000; --trace:#37d27a; --trace2:#36b6c8; --trace3:#c8b65a;
+  --alert:#ff4d57; --good:#37d27a;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+  --sans:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:13px; -webkit-font-smoothing:antialiased;
+}
+#app{display:flex; flex-direction:column; height:100vh; min-height:560px}
+header{
+  display:flex; align-items:baseline; gap:16px; padding:8px 14px;
+  border-bottom:1px solid var(--line); background:var(--panel2);
+}
+header .title{font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600}
+header .title b{color:var(--ink-bright); font-weight:700}
+#regime{
+  font-family:var(--mono); font-size:13px; padding:2px 10px; border-radius:3px;
+  border:1px solid var(--line2); color:var(--good); letter-spacing:.02em;
+}
+#regime.alert{color:var(--alert); border-color:#3a1a1e; background:#160a0c}
+header .layerline{margin-left:auto; display:flex; gap:6px; align-items:center}
+header .layerline span{font-size:11px; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.1em; margin-right:4px}
+
+main{flex:1; display:grid; grid-template-columns:1fr 312px; gap:1px; background:var(--line); min-height:0}
+#stage{display:grid; grid-template-rows:minmax(0,1.45fr) minmax(0,1fr); gap:1px; background:var(--line); min-height:0}
+#stageTop{display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:1px; background:var(--line); min-height:0}
+#stageBot{display:grid; grid-template-columns:minmax(0,1fr) 196px; gap:1px; background:var(--line); min-height:0}
+.panel{background:var(--panel); position:relative; min-width:0; min-height:0; display:flex; flex-direction:column}
+.panel.hidden{display:none}
+.cap{
+  position:absolute; top:7px; left:9px; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-dim); font-weight:600; z-index:2; pointer-events:none;
+}
+.cap .sub{color:var(--ink-dim); opacity:.7; letter-spacing:.02em; text-transform:none; font-weight:400}
+canvas{width:100%; height:100%; display:block}
+
+#side{background:var(--panel2); overflow-y:auto; padding:12px 12px 18px}
+.group{margin-bottom:14px}
+.group > h2{
+  font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-dim);
+  margin:0 0 8px; font-weight:700; border-bottom:1px solid var(--line); padding-bottom:5px;
+}
+.group > h2 .tag{float:right; color:var(--ink-dim); opacity:.7; font-weight:400; letter-spacing:.04em; text-transform:none}
+.ctl{margin:0 0 11px}
+.ctl .row{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px}
+.ctl .name{color:var(--ink); font-size:12px}
+.ctl .name em{color:var(--signal); font-style:normal; font-family:var(--mono)}
+.ctl .val{font-family:var(--mono); font-size:12px; color:var(--ink-bright)}
+.ctl .hint{font-size:10.5px; color:var(--ink-dim); margin-top:2px; line-height:1.35}
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:18px; background:transparent; cursor:pointer; margin:0;
+}
+input[type=range]::-webkit-slider-runnable-track{height:3px; background:var(--line2); border-radius:2px}
+input[type=range]::-moz-range-track{height:3px; background:var(--line2); border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:13px; height:13px; margin-top:-5px; border-radius:50%; background:var(--ink-bright); border:2px solid var(--bg); box-shadow:0 0 0 1px var(--line2)}
+input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; background:var(--ink-bright); border:2px solid var(--bg)}
+.track{position:relative; height:6px; margin-top:-3px}
+.healthy{position:absolute; height:3px; top:0; background:rgba(55,210,122,.35); border-radius:2px; pointer-events:none}
+.seg{display:flex; gap:4px; flex-wrap:wrap}
+.seg button, .btnrow button{
+  font-family:var(--sans); font-size:11.5px; color:var(--ink); background:var(--panel);
+  border:1px solid var(--line2); border-radius:3px; padding:5px 9px; cursor:pointer; letter-spacing:.01em;
+}
+.seg button:hover, .btnrow button:hover{border-color:var(--ink-dim); color:var(--ink-bright)}
+.seg button.active{background:#13202b; border-color:var(--signal); color:var(--ink-bright)}
+.btnrow{display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px}
+.btnrow button.wide{flex:1}
+.diag{font-family:var(--mono); font-size:11.5px; line-height:1.75}
+.diag .d{display:flex; justify-content:space-between; border-bottom:1px dotted var(--line); padding:1px 0}
+.diag .d span:first-child{color:var(--ink-dim)}
+.diag .d span:last-child{color:var(--ink-bright)}
+.diag .d.warn span:last-child{color:var(--alert)}
+.note{font-size:10.5px; color:var(--ink-dim); line-height:1.4; margin-top:6px}
+@media (max-width:820px){
+  main{grid-template-columns:1fr; grid-template-rows:1fr auto}
+  #side{max-height:46vh}
+}
+@media (prefers-reduced-motion:reduce){ canvas{} }
 </style>
 </head>
 <body>
-<header>
-  <h1>Allocator Toy Model</h1>
-  <p>The mind competes for one channel of attention, and a regulator decides what gets through.
-  Pick a condition to see all of its graphs at once -- why mania swings, why psychosis fragments
-  and sticks, why ADHD and autism hold one fixed shape. Runs entirely in your browser.</p>
-</header>
-<main>
-  <section id="controls">
-    <div class="group">
-      <label>Condition</label>
-      <div id="conditions" class="seg"></div>
+<div id="app">
+  <header>
+    <div class="title">Allocator &nbsp;<b>one channel, four controls</b></div>
+    <div id="regime">starting</div>
+    <div class="layerline">
+      <span>layer</span>
+      <div class="seg" id="layers">
+        <button data-layer="1" class="active">1 contest</button>
+        <button data-layer="2">2 coalition</button>
+        <button data-layer="3">3 fit</button>
+        <button data-layer="all">last (all)</button>
+      </div>
     </div>
-    <div class="group">
-      <label>Part two &mdash; the coalition layer</label>
-      <div id="conditions2" class="seg"></div>
-      <p class="hint">One level below the modules: the contest among the sub-units a module is made of.</p>
-    </div>
-    <div class="group">
-      <label class="check"><input type="checkbox" id="noisy" checked> add randomness <span style="color:var(--muted)">&nbsp;(more lifelike)</span></label>
-    </div>
-    <div class="group">
-      <label>Environmental stressor</label>
-      <div id="stressSliders"></div>
-      <p class="hint">A push from outside, with a per-tick random wobble (on a little by default). The lean biases that wobble up (more gain) or down (less gain); 0 is even. Drives the time-series and field views.</p>
-    </div>
-    <details class="group" id="advanced">
-      <summary>Adjust the dials yourself</summary>
-      <div id="sliders"></div>
-      <label class="check"><input type="checkbox" id="adapt" checked> mood regulator on</label>
-    </details>
-    <button id="mathBtn" type="button">Show the math</button>
-  </section>
-  <section id="out">
-    <div id="dashboard"></div>
-  </section>
-</main>
-<div id="mathModal" class="modal" hidden>
-  <div class="modal-box">
-    <button id="mathClose" class="modal-close" type="button">close</button>
-    <h2>The math behind the model</h2>
-    <p class="sub">One equation, run with different settings. Illustrative, not fitted to data.</p>
-    <div id="mathBody">
-      <h4>State</h4>
-      <p><i>g</i><sub>i</sub> &isin; (0,1): the gain on relevance in channel <i>i</i> &mdash; near 1 the flooding arm, near 0 the collapse arm, &frac12; euthymia. The two arms are one fault, not two: a raised bar floods some channels while it starves others at the same time, so a real field shows both together (only bipolar separates them in time). &nbsp; <i>a</i> &isin; (0,1): the bar, a slow threshold each bid must clear &mdash; engaged in every condition, so it moves throughout; only bipolar crosses its Hopf.</p>
+  </header>
 
-      <h4>Dynamics <span class="note">&nbsp; (overdot = d/d<i>t</i>; S(<i>x</i>) = 1/(1+e<sup>&minus;<i>x</i></sup>), S&prime;(0) = &frac14;)</span></h4>
-      <div class="eq">&tau;<sub>g</sub>&#8201;&#x0121;<sub>i</sub> = &minus;<i>g</i><sub>i</sub> + S&#8201;&#40;&#8201;&beta;(<i>g</i><sub>i</sub>&minus;&frac12;) + <i>I</i> &minus; &kappa;(<i>a</i>&minus;&frac12;) + <i>c</i>(&#x1E21;&minus;<i>g</i><sub>i</sub>) + &sigma;&xi;<sub>i</sub>&#8201;&#41;</div>
-      <div class="eq">&tau;<sub>a</sub>&#8201;&#x0227; = &#x1E21; &minus; <i>a</i></div>
-      <p class="note">&#x1E21; is the mean over channels; &xi;<sub>i</sub> &sim; N(0,1) drawn fresh each step; &tau;<sub>g</sub> = 1, &tau;<sub>a</sub> = 40, d<i>t</i> = 0.05 (Euler).</p>
+  <main>
+    <section id="stage">
+      <div id="stageTop">
+        <div class="panel" data-layers="1 2 3 all">
+          <div class="cap" id="capCh">the channel <span class="sub">u, evidence y, shared state m</span></div>
+          <canvas id="ch"></canvas>
+        </div>
+        <div id="stageRight" style="display:grid; grid-template-rows:1fr 1fr; gap:1px; background:var(--line); min-width:0; min-height:0">
+          <div class="panel" data-layers="1 2 all">
+            <div class="cap">division p <span class="sub">who is winning, how concentrated</span></div>
+            <canvas id="div"></canvas>
+          </div>
+          <div class="panel" data-layers="1 3 all">
+            <div class="cap">fill F <span class="sub">how much competes</span></div>
+            <canvas id="fill"></canvas>
+          </div>
+        </div>
+      </div>
+      <div id="stageBot">
+        <div class="panel" data-layers="1 2 3 all">
+          <div class="cap" id="capTr">traces <span class="sub" id="capTrSub">F, concentration H, tracking error</span></div>
+          <canvas id="tr"></canvas>
+        </div>
+        <div class="panel" data-layers="1 2 3 all" style="padding:24px 12px 12px">
+          <div class="cap">readout</div>
+          <div class="diag" id="diag"></div>
+        </div>
+      </div>
+    </section>
 
-      <h4>Parameters</h4>
-      <table class="params">
-        <tr><td>&beta;</td><td>self-reinforcement (loop gain)</td><td>&kappa;</td><td>homeostat strength (sets the bar)</td></tr>
-        <tr><td><i>I</i></td><td>environmental stressor</td><td><i>c</i></td><td>integrating gain (coupling)</td></tr>
-        <tr><td><i>k</i></td><td>discount steepness (ADHD)</td><td>&lambda;</td><td>flexibility (autism)</td></tr>
-      </table>
-      <p class="note">The stressor <i>I</i> is a steady outside push; a per-tick wobble adds a random kick of size up to &delta; each step. A lean &nu; &isin; [&minus;1,1] biases those kicks: the kick is upward with probability (1+&nu;)/2, so <i>I</i>(<i>t</i>) = <i>I</i><sub>0</sub> &plusmn; &delta;&#8201;U(0,1) with the sign biased by &nu; (&nu; &gt; 0 pushes the field up, &nu; &lt; 0 down). It drives the time-series and field views.</p>
-
-      <h4>Resting states &amp; bifurcations <span class="note">&nbsp; (single channel; at rest <i>a</i> = <i>g</i>)</span></h4>
-      <div class="eq">effective gain &nbsp; G = &beta; &minus; &kappa;, &nbsp;&nbsp; fixed points: &nbsp; <i>g</i> = S&#40;&#8201;G(<i>g</i>&minus;&frac12;)&#8201;&#41;</div>
-      <p>G &lt; 4 &rarr; one euthymic state at <i>g</i> = &frac12; &nbsp;&middot;&nbsp; G &gt; 4 &rarr; two arms + an unstable threshold = <b>fold</b> (schizophrenia). Since S&prime;(0) = &frac14;, the split is exactly at G = 4.</p>
-      <div class="eq">euthymia stability: &nbsp; tr&#8201;J = (&beta;/4 &minus; 1)/&tau;<sub>g</sub> &minus; 1/&tau;<sub>a</sub></div>
-      <p>tr&#8201;J &lt; 0 &rarr; damped (it rests) &nbsp;&middot;&nbsp; tr&#8201;J &gt; 0 with G &lt; 4 &rarr; orbited = <b>Hopf</b> (bipolar). Near the fold recovery slows monotonically; near the Hopf it slows while ringing.</p>
-
-      <h4>Miscalibration profiles <span class="note">&nbsp; (stable loop, &beta; small; the fault is a fixed setting)</span></h4>
-      <div class="eq">ADHD: &nbsp; <i>v</i>(<i>d</i>) = 1 / (1 + <i>k&#8201;d</i>) <span class="note">&nbsp;&mdash; value of a reward at delay <i>d</i>; weight = the resting <i>g</i> it drives</span></div>
-      <div class="eq">autism: &nbsp; mismatch = <i>g</i> &minus; <i>g</i>*, &nbsp; the realized gain tracks the optimum <i>g</i>* by a fraction &lambda; (&lambda; = 1 cancels it)</div>
-
-      <h4>Part two: the coalition layer <span class="note">&nbsp; (recruitment beneath the module)</span></h4>
-      <p>A module is a coalition of sub-units; its CONCENTRATION &phi; is the largest coalition's share of the mass. Recruitment runs the same fold one level down, with the recruitment gain &gamma; in place of the loop gain:</p>
-      <div class="eq">&phi;&#8202;&prime; = S&#8201;&#40;&#8201;&gamma;(&phi; &minus; &frac12;) + <i>b</i>&#8201;&#41; <span class="note">&nbsp; b = bias toward one coalition</span></div>
-      <p>&gamma; &lt; 4 leaves the layer fluid (mass spread, health); &gamma; &gt; 4 is bistable, a first-order condensation onto one coalition (capture/monopoly) whose hysteresis in <i>b</i> is relapse -- a cusp in (&gamma;, <i>b</i>). Continuous (proportional) recruitment would slide on and off with no gap; relapse is the signature of bandwagon (coordination) recruitment. The distribution side is preferential attachment: mass joins coalition <i>i</i> with probability &prop; (mass<sub>i</sub>)<sup>&alpha;</sup>, condensing for &alpha; &gt; 1. This slice derives the capture/condensation only; the phase view crosses it against integration (<i>c</i>) for orientation, where fragmentation is part one's axis, not recruitment's.</p>
-      <p class="note">Part three (what fit answers to) is grounding, not new mechanics, and is not modelled here: fit grounds in the serial bottleneck, the discount rate is its horizon (a steep discount weakens the future guard against capture), the proxy gap is dissolved from below (percepts are bids bred toward correspondence), and only the feel is left open. See the README.</p>
-    </div>
-  </div>
+    <aside id="side">
+      <div class="group">
+        <h2>Malfunctions <span class="tag">loop integrity</span></h2>
+        <div class="ctl" id="ctl-G"></div>
+        <div class="ctl" id="ctl-kP"></div>
+      </div>
+      <div class="group">
+        <h2>Miscalibrations <span class="tag">dial settings</span></h2>
+        <div class="ctl" id="ctl-delta"></div>
+        <div class="ctl" id="ctl-phi"></div>
+      </div>
+      <div class="group">
+        <h2>Environment <span class="tag">fitness, surplus vs deficit</span></h2>
+        <div class="ctl" id="ctl-env"></div>
+        <p class="note">Feast vs famine sets the reproductive environment: feast (+) is a surplus that grows the fill, famine (-) a deficit that starves it. Randomness rides on it, always on.</p>
+      </div>
+      <div class="group">
+        <h2>World &amp; run</h2>
+        <div class="btnrow">
+          <button id="btnShift" class="wide">context shift (jump y)</button>
+          <button id="btnReseed" class="wide">reseed u</button>
+        </div>
+        <div class="ctl" id="ctl-speed"></div>
+        <div class="btnrow">
+          <button id="btnPause" class="wide">pause</button>
+          <button id="btnStep" class="wide">step</button>
+        </div>
+      </div>
+      <p class="note" id="layerNote"></p>
+    </aside>
+  </main>
 </div>
-<footer>
-  A deliberately simple toy for the theory, not a fit to data. Under the hood it is one
-  equation run with different settings; for the dynamicists, the two malfunctions are a fold
-  (schizophrenia) and a Hopf bifurcation (bipolar), and part two runs that fold one level
-  down as the condensation of a recruitment contest.
-</footer>
+
 <script>
 "use strict";
-
-// ---- model (a faithful port of allocator_toy.py) --------------------------
-
-function S(x){ if(x >= 0){ return 1/(1+Math.exp(-x)); } var z = Math.exp(x); return z/(1+z); }
-function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s/a.length; }
-function pstdev(a){ var m=mean(a),s=0; for(var i=0;i<a.length;i++){ var d=a[i]-m; s+=d*d; } return Math.sqrt(s/a.length); }
-function pearson(a,b){
-  var n=a.length; if(n<2) return NaN;
-  var ma=mean(a), mb=mean(b), num=0, da=0, db=0;
-  for(var i=0;i<n;i++){ num+=(a[i]-ma)*(b[i]-mb); da+=(a[i]-ma)*(a[i]-ma); db+=(b[i]-mb)*(b[i]-mb); }
-  da=Math.sqrt(da); db=Math.sqrt(db);
-  return (da>0 && db>0) ? num/(da*db) : NaN;
-}
-function linspace(a,b,n){ if(n===1) return [a]; var o=[]; for(var i=0;i<n;i++) o.push(a+(b-a)*i/(n-1)); return o; }
-
-// seeded RNG (mulberry32) and gaussian (Box-Muller), so runs are reproducible
-function mulberry32(seed){
-  var t = seed >>> 0;
-  return function(){
-    t += 0x6D2B79F5;
-    var r = Math.imul(t ^ (t >>> 15), t | 1);
-    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function gaussFactory(seed){
-  var rand = mulberry32(seed), spare = null;
-  return function(){
-    if(spare !== null){ var s = spare; spare = null; return s; }
-    var u, v, s2;
-    do { u = 2*rand()-1; v = 2*rand()-1; s2 = u*u + v*v; } while(s2 >= 1 || s2 === 0);
-    var f = Math.sqrt(-2*Math.log(s2)/s2);
-    spare = v*f; return u*f;
-  };
-}
-
-function defaults(){ return {beta:2, I:0, ka:0, c:1, k:0.2, lam:1, adapt:1, noise:0, tau_g:1, tau_a:40, dt:0.05, seed:0}; }
-
-// drive is null or {base, wobble}: base is the steady stressor push, shared by
-// every module (a uniform outside pressure); wobble, if present, is drawn fresh
-// per module per step, so the stressor's randomness hits every module similarly
-// but independently rather than as one shared kick.
-function simulate(p, T, n, drive, g0, a0, gauss){
-  var steps = Math.round(T/p.dt);
-  var g;
-  if(g0 == null){ g = []; for(var i=0;i<n;i++) g.push(0.5); }
-  else if(Array.isArray(g0)){ g = g0.slice(); }
-  else { g = []; for(var i=0;i<n;i++) g.push(g0); }
-  var a = a0;
-  var base = drive ? drive.base : p.I, wob = drive ? drive.wobble : null;
-  var outG = [], outA = [], t = [];
-  for(var s=0;s<steps;s++){
-    var now = s*p.dt;
-    var mg = mean(g);
-    var ng = [];
-    for(var i=0;i<n;i++){
-      var x = p.beta*(g[i]-0.5) + base - p.ka*(a-0.5) + p.c*(mg-g[i]);
-      if(wob) x += wob();                 // per-module stressor wobble
-      if(p.noise > 0) x += p.noise * gauss();
-      ng.push(g[i] + p.dt*(-g[i] + S(x))/p.tau_g);
-    }
-    g = ng;
-    if(p.adapt) a = a + p.dt*(mg - a)/p.tau_a;
-    outG.push(g); outA.push(a); t.push(now);
-  }
-  return {t:t, g:outG, a:outA};
-}
-
-// Single-channel run to steady state, returning only the final g. Tight and
-// allocation-free (no trajectory stored), since settle is called hundreds of
-// times by the sweep and the profiles. For one channel the coupling term
-// c*(mean(g)-g) is zero, so it drops out exactly.
-function settle(p, driveValue, g0, T){
-  T = (T == null) ? 80.0 : T;
-  var steps = Math.round(T/p.dt), g = g0, a = 0.5;
-  for(var s=0;s<steps;s++){
-    var mg = g;
-    var x = p.beta*(g-0.5) + driveValue - p.ka*(a-0.5);
-    g = g + p.dt*(-g + S(x))/p.tau_g;
-    if(p.adapt) a = a + p.dt*(mg - a)/p.tau_a;
-  }
-  return g;
-}
-
-// Fixed points of the effective-gain map g = S(gain*(g-0.5)). The homeostat
-// opposes the self-reinforcement, so the effective gain is beta-ka.
-function fixedPoints(gain){
-  var grid = linspace(1e-4, 1-1e-4, 4000);
-  function h(g){ return S(gain*(g-0.5)) - g; }
-  var hs = grid.map(h), roots = [];
-  for(var i=0;i<grid.length-1;i++){
-    if(hs[i] === 0 || hs[i]*hs[i+1] < 0){
-      var lo = grid[i], hi = grid[i+1];
-      for(var j=0;j<60;j++){
-        var mid = 0.5*(lo+hi);
-        if(h(lo)*h(mid) <= 0) hi = mid; else lo = mid;
-      }
-      var g = 0.5*(lo+hi);
-      var sx = S(gain*(g-0.5));
-      roots.push([g, (-1 + gain*sx*(1-sx)) < 0]);
-    }
-  }
-  var out = [];
-  roots.forEach(function(r){
-    var dup = out.some(function(o){ return Math.abs(r[0]-o[0]) < 1e-3; });
-    if(!dup) out.push(r);
-  });
-  return out;
-}
-
-function loopArea(xs, ys){
-  var n = xs.length, s = 0;
-  for(var i=0;i<n;i++){ var jn=(i+1)%n; s += xs[i]*ys[jn] - xs[jn]*ys[i]; }
-  return 0.5*Math.abs(s);
-}
-
-// ---- part two: the coalition layer (recruitment beneath the module) ---------
-// A module is itself a coalition of sub-units that flow toward standing. How
-// steeply standing rises with a coalition's mass is the recruitment gain:
-// subcritical leaves the mass fluid (health), supercritical condenses it onto one
-// coalition (capture). A bandwagon recruitment makes that condensation a
-// first-order fold -- hysteresis, relapse. The bandwagon fold is the bidding fold
-// one level down, so condense() reuses settle().
-function condense(gamma, bias, phi0){
-  var p = defaults(); p.beta = gamma; p.adapt = 0; p.ka = 0; p.c = 1;
-  return settle(p, bias, phi0);
-}
-// Grow n coalitions: each step a unit of mass joins coalition i with probability
-// proportional to mass_i^alpha. alpha<1 spreads (fluid), alpha=1 is proportional,
-// alpha>1 condenses onto one coalition (Bose-Einstein condensation). Returns the
-// final shares of the total, largest first.
-function preferentialAttachment(n, alpha, steps, rng){
-  var m = []; for(var i=0;i<n;i++) m.push(1.0);
-  for(var s=0;s<steps;s++){
-    var w = [], tot = 0;
-    for(var i=0;i<n;i++){ var wi = Math.pow(m[i], alpha); w.push(wi); tot += wi; }
-    var r = rng()*tot, acc = 0;
-    for(var i=0;i<n;i++){ acc += w[i]; if(r <= acc){ m[i] += 1; break; } }
-  }
-  var total = 0; for(var i=0;i<n;i++) total += m[i];
-  var sh = m.map(function(x){ return x/total; });
-  sh.sort(function(a,b){ return b-a; });
-  return sh;
-}
-
-// ---- helpers --------------------------------------------------------------
-
-function clamp01(f){ return f<0 ? 0 : (f>1 ? 1 : f); }
-function downsample(arr, width){
-  var n = arr.length;
-  if(n <= width) return arr.slice();
-  var out = [];
-  for(var i=0;i<width;i++) out.push(arr[Math.round(i*(n-1)/(width-1))]);
-  return out;
-}
-
-// ---- SVG rendering --------------------------------------------------------
-
-var PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"];
-function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function fmt(v){
-  if(v === 0) return "0";
-  if(Math.abs(v) >= 1000 || Math.abs(v) < 0.001) return v.toExponential(1);
-  return Number(v.toPrecision(3)).toString();
-}
-function g3(v){ return Number(v.toPrecision(3)).toString(); }
-function svgOpen(w,h){
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" '
-       + 'font-family="monospace" font-size="12"><rect width="'+w+'" height="'+h+'" fill="white"/>';
-}
-function svgLines(title, xlabel, ylabel, series, opts){
-  opts = opts || {};
-  var W=680, H=420, ml=78, mr=180, mt=44, mb=52;
-  var px0=ml, px1=W-mr, py0=H-mb, py1=mt;
-  var xsAll=[], ysAll=[];
-  series.forEach(function(s){ s.xs.forEach(function(x){xsAll.push(x);}); s.ys.forEach(function(y){ysAll.push(y);}); });
-  if(opts.points) opts.points.forEach(function(p){ xsAll.push(p[0]); ysAll.push(p[1]); });
-  var xmin=Math.min.apply(null,xsAll), xmax=Math.max.apply(null,xsAll);
-  var ymin=Math.min.apply(null,ysAll), ymax=Math.max.apply(null,ysAll);
-  if(xmax<=xmin) xmax=xmin+1;
-  if(ymax<=ymin) ymax=ymin+1;
-  ymin -= 0.06*(ymax-ymin); ymax += 0.06*(ymax-ymin);
-  function X(x){ return px0 + (x-xmin)/(xmax-xmin)*(px1-px0); }
-  function Y(y){ return py0 + (y-ymin)/(ymax-ymin)*(py1-py0); }
-  var o = [svgOpen(W,H)];
-  // shaded regions (e.g. the hysteresis gap), drawn behind everything
-  if(opts.fills) opts.fills.forEach(function(f){
-    var pts = f.points.map(function(p){ return X(p[0]).toFixed(2)+","+Y(p[1]).toFixed(2); }).join(" ");
-    o.push('<polygon points="'+pts+'" fill="'+f.color+'" stroke="none"/>');
-  });
-  // vertical shaded bands spanning the plot height (e.g. basins of attraction)
-  if(opts.vbands) opts.vbands.forEach(function(vb){
-    var bx0=X(vb.x0), bx1=X(vb.x1);
-    o.push('<rect x="'+Math.min(bx0,bx1).toFixed(1)+'" y="'+py1+'" width="'+Math.abs(bx1-bx0).toFixed(1)+'" height="'+(py0-py1).toFixed(1)+'" fill="'+vb.color+'"/>');
-  });
-  o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
-  o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px1+'" y2="'+py0+'" stroke="black"/>');
-  o.push('<line x1="'+px0+'" y1="'+py0+'" x2="'+px0+'" y2="'+py1+'" stroke="black"/>');
-  for(var i=0;i<6;i++){
-    var xv = xmin+(xmax-xmin)*i/5, xp = X(xv);
-    o.push('<text x="'+xp+'" y="'+(py0+18)+'" text-anchor="middle" fill="#444">'+esc(fmt(xv))+'</text>');
-    var yv = ymin+(ymax-ymin)*i/5, yp = Y(yv);
-    o.push('<text x="'+(px0-8)+'" y="'+(yp+4)+'" text-anchor="end" fill="#444">'+esc(fmt(yv))+'</text>');
-  }
-  // dashed horizontal reference lines (e.g. "back to normal")
-  if(opts.hlines) opts.hlines.forEach(function(h){
-    var yp = Y(h.y), hc = h.color || "#888";
-    o.push('<line x1="'+px0+'" y1="'+yp.toFixed(2)+'" x2="'+px1+'" y2="'+yp.toFixed(2)+'" stroke="'+hc+'" stroke-width="1" stroke-dasharray="5 4"/>');
-    if(h.label) o.push('<text x="'+(px1-4)+'" y="'+(yp-5).toFixed(2)+'" text-anchor="end" fill="'+hc+'" font-size="11">'+esc(h.label)+'</text>');
-  });
-  o.push('<text x="'+((px0+px1)/2)+'" y="'+(H-14)+'" text-anchor="middle">'+esc(xlabel)+'</text>');
-  o.push('<text x="14" y="'+((py0+py1)/2)+'" transform="rotate(-90 14 '+((py0+py1)/2)+')" text-anchor="middle">'+esc(ylabel)+'</text>');
-  function arrowHead(px,py,ang,col){
-    var d=5;
-    return '<path d="M0,0 L'+(-d*1.7)+','+(-d)+' L'+(-d*1.7)+','+d+' Z" fill="'+col+'" transform="translate('+px.toFixed(1)+','+py.toFixed(1)+') rotate('+(ang*180/Math.PI).toFixed(1)+')"/>';
-  }
-  series.forEach(function(s, i){
-    var col = s.color || PALETTE[i % PALETTE.length];
-    var w = s.width || 1.6;
-    var dash = s.dash ? ' stroke-dasharray="'+s.dash+'"' : '';
-    var pts = "";
-    for(var j=0;j<s.xs.length;j++){ pts += X(s.xs[j]).toFixed(2)+","+Y(s.ys[j]).toFixed(2)+" "; }
-    o.push('<polyline fill="none" stroke="'+col+'" stroke-width="'+w+'"'+dash+' points="'+pts+'"/>');
-    if(opts.markers){ for(var j=0;j<s.xs.length;j++){ o.push('<circle cx="'+X(s.xs[j]).toFixed(2)+'" cy="'+Y(s.ys[j]).toFixed(2)+'" r="2.5" fill="'+col+'"/>'); } }
-    var ly = mt + 10 + i*18;
-    o.push('<line x1="'+(px1+12)+'" y1="'+ly+'" x2="'+(px1+32)+'" y2="'+ly+'" stroke="'+col+'" stroke-width="2.5"'+dash+'/>');
-    o.push('<text x="'+(px1+38)+'" y="'+(ly+4)+'">'+esc(s.label)+'</text>');
-  });
-  // directional arrowheads along chosen series (e.g. the sweep's travel direction)
-  if(opts.arrows) opts.arrows.forEach(function(ar){
-    var s = series[ar.series], col = s.color || PALETTE[ar.series % PALETTE.length];
-    (ar.fracs || [0.5]).forEach(function(fr){
-      var n=s.xs.length, idx=Math.max(1, Math.min(n-1, Math.round(fr*(n-1))));
-      var x0=X(s.xs[idx-1]), y0=Y(s.ys[idx-1]), x1=X(s.xs[idx]), y1=Y(s.ys[idx]);
-      o.push(arrowHead(x1, y1, Math.atan2(y1-y0, x1-x0), col));
-    });
-  });
-  // phase-line flow arrows near the axis: which way the state slides in a region
-  if(opts.flowArrows) opts.flowArrows.forEach(function(fa){
-    var ax=X(fa.x), ay=py0-13, fc=fa.color||"#777", dir=fa.dir>0?1:-1;
-    o.push('<line x1="'+(ax-dir*9).toFixed(1)+'" y1="'+ay+'" x2="'+(ax+dir*3).toFixed(1)+'" y2="'+ay+'" stroke="'+fc+'" stroke-width="2"/>');
-    o.push(arrowHead(ax+dir*9, ay, dir>0?0:Math.PI, fc));
-  });
-  // an orbit ring: a single point that is circled rather than settled into (Hopf)
-  if(opts.orbit){
-    var ox=X(opts.orbit.x), oy=Y(opts.orbit.y), orx=24, ory=46, oc=opts.orbit.color||"#d62728";
-    o.push('<ellipse cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" rx="'+orx+'" ry="'+ory+'" fill="none" stroke="'+oc+'" stroke-width="1.6" stroke-dasharray="5 4"/>');
-    o.push(arrowHead(ox, oy-ory, 0, oc));
-  }
-  if(opts.points){
-    opts.points.forEach(function(p){
-      var col = p[2] ? "#2ca02c" : "#d62728";
-      o.push('<circle cx="'+X(p[0]).toFixed(2)+'" cy="'+Y(p[1]).toFixed(2)+'" r="4" fill="'+col+'" stroke="black"/>');
-    });
-  }
-  // free text notes placed in data coordinates
-  if(opts.notes) opts.notes.forEach(function(nt){
-    o.push('<text x="'+X(nt.x).toFixed(1)+'" y="'+Y(nt.y).toFixed(1)+'" text-anchor="'+(nt.anchor||"middle")+'" fill="'+(nt.color||"#333")+'" font-size="'+(nt.size||12)+'" font-style="italic">'+esc(nt.text)+'</text>');
-  });
-  o.push("</svg>");
-  return o.join("\n");
-}
-function heatRgb(f){
-  f = clamp01(f);
-  var stops = [[0,[0,0,4]],[0.25,[81,18,124]],[0.5,[183,55,121]],[0.75,[252,137,97]],[1,[252,253,191]]];
-  for(var i=0;i<stops.length-1;i++){
-    var f0=stops[i][0], c0=stops[i][1], f1=stops[i+1][0], c1=stops[i+1][1];
-    if(f <= f1){
-      var t = (f1>f0) ? (f-f0)/(f1-f0) : 0;
-      function hx(j){ return ("0"+Math.round(c0[j]+(c1[j]-c0[j])*t).toString(16)).slice(-2); }
-      return "#"+hx(0)+hx(1)+hx(2);
-    }
-  }
-  return "#fcfdbf";
-}
-function svgHeatmap(title, matrix){
-  var rows=matrix.length, cols=matrix[0].length;
-  var W=680, H=360, ml=64, mr=24, mt=44, mb=50;
-  var pw=W-ml-mr, ph=H-mt-mb, cw=pw/cols, chh=ph/rows;
-  var o = [svgOpen(W,H)];
-  o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
-  for(var r=0;r<rows;r++){
-    for(var c=0;c<cols;c++){
-      var x = ml + c*cw, y = mt + r*chh;
-      o.push('<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+(cw+0.6).toFixed(2)+'" height="'+(chh+0.6).toFixed(2)+'" fill="'+heatRgb(matrix[r][c])+'"/>');
-    }
-  }
-  o.push('<text x="'+(ml+pw/2)+'" y="'+(H-14)+'" text-anchor="middle">time  t</text>');
-  o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">channel  i</text>');
-  o.push("</svg>");
-  return o.join("\n");
-}
-// Categorical phase map: grid[r][c] is 0 health, 1 fragmentation, 2 capture.
-// xs / ys are the axis tick values (gain across, integration up).
-var PHASE_COL = ["#2ca02c", "#7e57c2", "#d62728"], PHASE_NAME = ["health", "fragmentation", "capture"];
-function svgPhaseMap(title, xlabel, ylabel, xs, ys, grid){
-  var rows=grid.length, cols=grid[0].length;
-  var W=680, H=420, ml=64, mr=150, mt=44, mb=54;
-  var pw=W-ml-mr, ph=H-mt-mb, cw=pw/cols, chh=ph/rows;
-  var o=[svgOpen(W,H)];
-  o.push('<text x="'+ml+'" y="22" font-size="15">'+esc(title)+'</text>');
-  for(var r=0;r<rows;r++) for(var c=0;c<cols;c++){
-    var x=ml+c*cw, y=mt+(rows-1-r)*chh;     // row 0 = lowest y, drawn at bottom
-    o.push('<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+(cw+0.6).toFixed(2)+'" height="'+(chh+0.6).toFixed(2)+'" fill="'+PHASE_COL[grid[r][c]]+'"/>');
-  }
-  // a few axis ticks
-  for(var i=0;i<=4;i++){
-    var fx=i/4, xv=xs[0]+(xs[xs.length-1]-xs[0])*fx;
-    o.push('<text x="'+(ml+fx*pw)+'" y="'+(mt+ph+16)+'" text-anchor="middle" fill="#444">'+esc(fmt(xv))+'</text>');
-    var yv=ys[0]+(ys[ys.length-1]-ys[0])*fx;
-    o.push('<text x="'+(ml-8)+'" y="'+(mt+ph-fx*ph+4)+'" text-anchor="end" fill="#444">'+esc(fmt(yv))+'</text>');
-  }
-  o.push('<text x="'+(ml+pw/2)+'" y="'+(H-12)+'" text-anchor="middle">'+esc(xlabel)+'</text>');
-  o.push('<text x="16" y="'+(mt+ph/2)+'" transform="rotate(-90 16 '+(mt+ph/2)+')" text-anchor="middle">'+esc(ylabel)+'</text>');
-  for(var k=0;k<3;k++){
-    var ly=mt+10+k*20;
-    o.push('<rect x="'+(ml+pw+14)+'" y="'+(ly-9)+'" width="13" height="13" fill="'+PHASE_COL[k]+'"/>');
-    o.push('<text x="'+(ml+pw+32)+'" y="'+(ly+2)+'">'+esc(PHASE_NAME[k])+'</text>');
-  }
-  o.push("</svg>");
-  return o.join("\n");
-}
-
-// ---- views (each returns {svgs:[...], text:"..."}) ------------------------
-
-function col(arr, i){ return arr.map(function(row){ return row[i]; }); }
-
-// The environmental stressor as a drive(t): a steady push plus a fresh per-tick
-// fluctuation, the same value for every channel at a given tick. null = none.
-// Returns {base, wobble}: base is the steady push (shared by every module);
-// wobble (or null) is a fresh per-module random kick. The lean biases each kick:
-// it is upward with probability (1+lean)/2, so lean > 0 pushes the field up (more
-// gain), lean < 0 down (less gain), lean = 0 even. The kick's magnitude stays
-// random. Because wobble is called once per module, the stressor's randomness has
-// a similar but independent effect on every module rather than one shared kick.
-function stressDrive(){
-  if(stress === 0 && stressJitter === 0) return null;
-  var s = stress, j = stressJitter, pUp = (1 + stressLean)/2, rng = mulberry32(20240517);
-  if(j === 0) return {base: s, wobble: null};
-  return {base: s, wobble: function(){ var sign = (rng() < pUp) ? 1 : -1; return sign * j * rng(); }};
-}
-
-// Each view returns {svgs, title, body}: a friendly heading and a plain-language
-// reading of what the picture means. The point is a feel for the model, so the
-// text leans on the model's own ideas (flooding, collapse, snap vs slide, swing,
-// fragment) and skips the math (g, beta, hysteresis area, autocorrelation).
-
-function viewFp(p){
-  var ka = p.adapt ? p.ka : 0;
-  var ge = p.beta - ka;                              // effective gain
-  var fps = fixedPoints(ge);
-  var trace = (0.25*p.beta - 1)/p.tau_g - 1/p.tau_a; // 2D stability at euthymia
-  var hopf = (fps.length === 1 && trace > 0);
-  var grid = linspace(0,1,400);
-  var curve = grid.map(function(g){ return S(ge*(g-0.5)); });
-  function drift(g){ return S(ge*(g-0.5)) - g; }  // >0: state rises; <0: it falls
-
-  var opts = {points: fps.map(function(f){ return [f[0], f[0], f[1] && !hopf]; }), notes: []};
-  if(hopf){
-    var c0 = fps[0][0];
-    opts.orbit = {x:c0, y:c0, color:"#d62728"};
-    opts.notes.push({x: Math.min(0.62, c0+0.12), y:c0, text:"circles, never rests", color:"#b0282d", anchor:"start"});
-  } else {
-    // Shade each basin of attraction (split at the unstable points), tinted by the
-    // arm it leads to, and put a phase-line arrow in each region between fixed
-    // points showing which way the state slides. Arrows converge on the green
-    // resting places and run away from the red tipping point.
-    var unstable = fps.filter(function(f){ return !f[1]; }).map(function(f){ return f[0]; }).sort(function(a,b){return a-b;});
-    var bounds = [0].concat(unstable).concat([1]);
-    opts.vbands = [];
-    for(var b=0;b<bounds.length-1;b++){
-      var lo=bounds[b], hi=bounds[b+1], mid=(lo+hi)/2;
-      var tint = (mid < 0.45) ? "rgba(31,119,180,0.08)"
-               : (mid > 0.55 ? "rgba(255,127,14,0.08)" : "rgba(44,160,44,0.07)");
-      opts.vbands.push({x0:lo, x1:hi, color:tint});
-    }
-    var xs = fps.map(function(f){ return f[0]; }).slice().sort(function(a,b){return a-b;});
-    var rb = [0].concat(xs).concat([1]);
-    opts.flowArrows = [];
-    for(var k=0;k<rb.length-1;k++){
-      var m=(rb[k]+rb[k+1])/2, mx=Math.max(0.05, Math.min(0.95, m));
-      opts.flowArrows.push({x:mx, dir: drift(m)>0?1:-1});
-    }
-    if(unstable.length) opts.notes.push({x:unstable[0], y:0.82, text:"tipping point", color:"#b0282d"});
-  }
-
-  var svg = svgLines("Where the mind can settle, and which way it slides",
-    "g  -  the state  (0 collapsed, 1 flooded)", "where the next moment takes it",
-    [{label:"next-moment curve", xs:grid, ys:curve, color:"#1f77b4", width:2},
-     {label:"no-change line", xs:grid, ys:grid, color:"#bbb", width:1.2, dash:"4 3"}],
-    opts);
-  var body;
-  if(fps.length >= 2)
-    body = "The shaded bands are the places the mind can come to rest, and the small "
-      + "arrows show which way it slides from wherever it starts. There are two "
-      + "basins and no steady middle: one where everything floods with meaning (the "
-      + "over-connected, urgent world of psychosis) and one where meaning drains "
-      + "away (flat, withdrawn), split by an unstable tipping point (the red dot). "
-      + "This is one channel, though: across the whole field the same fold captures "
-      + "some channels into the flooded basin while it starves others in the "
-      + "collapsed one, at the same time. So psychosis runs both arms together -- "
-      + "flooding (positive symptoms, salience everywhere) and collapse (negative "
-      + "symptoms, the quiet starved out) as one fault, not a state the mind picks "
-      + "one of. The 'one mind, or many?' view shows that whole field.";
-  else if(hopf)
-    body = "There is just one resting place here -- a single balanced middle -- "
-      + "because the regulator holds the mind to one centre instead of letting it "
-      + "split in two. But the red ring shows that centre has gone unstable: instead "
-      + "of settling there, the system circles it, swinging out toward 'too much' "
-      + "and 'too little' and back through the middle, again and again. That is the "
-      + "bipolar pattern, and there is still a real middle (euthymia) it passes "
-      + "through between swings.";
-  else
-    body = "The shaded band is the whole landscape, and the arrows show the mind "
-      + "sliding toward the single resting place in the middle (the green dot) from "
-      + "wherever it starts. Nudge it and it slides back -- no trap to fall into, no "
-      + "swing to get caught in. A regulator doing its job.";
-  return {svgs:[svg], title:"Where the mind settles", body:body};
-}
-
-// Sweep ignores the stressor and reads only beta (VIEW_USES pins ka=0), and each
-// settle is deterministic, so its result is a pure function of beta. It is the
-// heaviest view, so we memoize it by beta: stressor drags and knob edits that do
-// not touch beta then reuse it instead of recomputing 322 settles.
-var sweepCache = {beta: null, val: null};
-function viewSweep(p){
-  if(sweepCache.beta === p.beta) return sweepCache.val;
-  var Imax=4.0, nPts=161;
-  var ups = linspace(-Imax, Imax, nPts), downs = ups.slice().reverse();
-  var g = settle(p, ups[0], 0.02), gUp=[], gDown=[];
-  ups.forEach(function(d){ g = settle(p, d, g); gUp.push(g); });
-  downs.forEach(function(d){ g = settle(p, d, g); gDown.push(g); });
-  var folded = loopArea(ups.concat(downs), gUp.concat(gDown)) > 0.3;
-  // Arrows show the direction of travel; for a folded loop, shade the gap between
-  // the up and down paths and label it, so the stickiness is a visible region.
-  var opts = {arrows: [{series:0, fracs:[0.30,0.58]}, {series:1, fracs:[0.30,0.58]}]};
-  if(folded){
-    var loop = ups.map(function(x,i){ return [x, gUp[i]]; })
-                  .concat(downs.map(function(x,i){ return [x, gDown[i]]; }));
-    opts.fills = [{points: loop, color: "rgba(214,39,40,0.10)"}];
-    opts.notes = [{x:0, y:0.5, text:"same pressure -> two possible states", color:"#b0282d"}];
-  }
-  var svg = svgLines("Push the pressure up (blue), then ease it back down (orange)",
-    "outside pressure   (toward collapse  <-  0  ->  toward flooding)",
-    "where the state settles  (0 collapsed, 1 flooded)",
-    [{label:"pushing up", xs:ups, ys:gUp}, {label:"easing back", xs:downs, ys:gDown}], opts);
-  var body = folded
-    ? "Read it as one trip with a there-and-back. Follow the blue line left to "
-      + "right (arrows): we raise an outside pressure and the state climbs, then "
-      + "jumps up to flooded. Now follow the orange line back, right to left: we "
-      + "lower the pressure again -- but the state does NOT drop back where it rose. "
-      + "It stays stuck high until the pressure falls much further, then snaps down. "
-      + "The shaded gap is the catch: at any pressure inside it the mind could be "
-      + "either high or low, depending on where it has been. That is why removing "
-      + "whatever triggered an episode does not end the episode -- the state has its "
-      + "own grip now. (Dynamicists call the gap 'hysteresis'.)"
-    : "Read it as one trip with a there-and-back. The blue line (arrows pointing "
-      + "right) raises an outside pressure; the orange line eases it back down. Here "
-      + "the two lie exactly on top of each other: the state just follows the "
-      + "pressure and returns the moment it is gone, with no gap and no memory of "
-      + "where it has been. Nothing latches. This is what a steady mind does -- and "
-      + "what a fixed trait (ADHD, autism) does too: it tracks the situation and "
-      + "never sticks.";
-  sweepCache = {beta: p.beta, val: {svgs:[svg], title:"Why a trigger sticks", body:body}};
-  return sweepCache.val;
-}
-
-// Recover ignores the knobs (it sweeps beta itself), so its output is constant
-// and we compute it once. The return-time runs stop the moment they recover.
-var recoverCache = null;
-function viewRecover(p){
-  if(recoverCache) return recoverCache;
-  var betas=[1.0,2.0,3.0,3.5,3.8,3.9,3.95], nudge=0.1, tol=0.05*nudge;
-  var Tmax=600.0, tau_g=p.tau_g, dt=p.dt, maxSteps=Math.round(Tmax/dt);
-  var rts = betas.map(function(beta){
-    var g = 0.5+nudge, rt = Tmax;
-    for(var s=0;s<maxSteps;s++){
-      g = g + dt*(-g + S(beta*(g-0.5)))/tau_g;      // ka=0: pure fold recovery
-      if(Math.abs(g-0.5) < tol){ rt = s*dt; break; }
-    }
-    return rt;
-  });
-  // The discriminator: the SHAPE of recovery near the edge. A fold (no homeostat)
-  // crawls back without overshoot; a Hopf (homeostat engaged) rings.
-  var Tshape = 200.0;
-  var fold = Object.assign(defaults(), {beta:3.97, ka:0, tau_g:p.tau_g, tau_a:p.tau_a, dt:p.dt, noise:0});
-  var hopf = Object.assign(defaults(), {beta:3.97, ka:3.97, tau_g:p.tau_g, tau_a:p.tau_a, dt:p.dt, noise:0});
-  var rf = simulate(fold, Tshape, 1, null, 0.5+nudge, 0.5, null);
-  var rh = simulate(hopf, Tshape, 1, null, 0.5+nudge, 0.5, null);
-  var tt = downsample(rf.t, 1200);
-  var foldDev = downsample(col(rf.g,0).map(function(v){return v-0.5;}), 1200);
-  var hopfDev = downsample(col(rh.g,0).map(function(v){return v-0.5;}), 1200);
-  var svg1 = svgLines("Recovery gets slower as a breakdown nears",
-    "loop gain  beta  (fold at 4)", "time to recover from a nudge",
-    [{label:"recovery time", xs:betas, ys:rts}], {markers:true});
-  // Mark the first dip below zero on the ringing curve, so "overshoot" is visible.
-  var lim = Math.floor(hopfDev.length*0.45), ti = 0;
-  for(var qi=1; qi<lim; qi++){ if(hopfDev[qi] < hopfDev[ti]) ti = qi; }
-  var svg2 = svgLines("How it bounces back tells you which breakdown is coming",
-    "time after a nudge", "distance from the middle  (0 = recovered)",
-    [{label:"toward psychosis", xs:tt, ys:foldDev, color:"#1f77b4"},
-     {label:"toward mood swings", xs:tt, ys:hopfDev, color:"#ff7f0e"}],
-    {hlines:[{y:0, label:"back to normal", color:"#888"}],
-     notes:[{x:tt[ti], y:hopfDev[ti]+0.010, text:"overshoots", color:"#c25e00", anchor:"start"}]});
-  var body = "Give the mind a small nudge and watch how it returns to the middle. "
-    + "The top chart: the nearer a breakdown, the longer it takes to recover -- a "
-    + "system heading for a tip turns sluggish well before anything visibly changes, "
-    + "which is a measurable warning sign. The bottom chart shows the SHAPE of that "
-    + "return, and the shape says which breakdown is coming. The blue line (toward "
-    + "psychosis) just slides straight back to the middle and stops. The orange line "
-    + "(toward mood swings) shoots past the middle to the opposite extreme and "
-    + "back, again and again -- ringing like a struck bell, the very swing that is "
-    + "about to take over. The dashed line is 'recovered'; only the orange one "
-    + "crosses it.";
-  recoverCache = {svgs:[svg1, svg2], title:"Early warning, before it tips", body:body};
-  return recoverCache;
-}
-
-function viewSeries(p){
-  p.noise = noisy ? SERIES_NOISE_ON : SERIES_NOISE_OFF;
-  var T=1000.0;
-  // start just off the unstable euthymic point so the dynamics develop on their own
-  var r = simulate(p, T, 1, stressDrive(), 0.55, 0.5, gaussFactory(p.seed));
-  var meanG = col(r.g, 0);
-  var t = downsample(r.t, 2000), gp = downsample(meanG, 2000);
-  var series = [{label:"g (gain)", xs:t, ys:gp}];
-  // the bar is a live control in every condition, so always show it (when on)
-  if(p.adapt) series.push({label:"a (the bar)", xs:t, ys:downsample(r.a, 2000)});
-  var svg = svgLines("The state over time", "time  t",
-    "g  (0 collapsed, 1 flooded)", series);
-  var ge = p.beta - (p.adapt ? p.ka : 0);
-  var trace = (0.25*p.beta - 1)/p.tau_g - 1/p.tau_a;
-  var body;
-  if(p.adapt && p.ka>0 && ge<4 && trace>0)
-    body = "This is the overall state, moment to moment. With the mood regulator "
-      + "destabilised it cannot hold a steady level: the system builds up until "
-      + "everything floods with significance -- racing, expansive, mania -- then "
-      + "overshoots and drains until nothing feels worth anything -- the flatness "
-      + "of depression -- before climbing back through the middle and round again. "
-      + "The swing is the illness, but there is still a normal middle it passes "
-      + "through between episodes. The orange line is the slow regulator, always a "
-      + "step behind.";
-  else if(p.beta>4 && ge>=4)
-    body = "This is the overall state over time. Here it does not swing -- it drops "
-      + "into one extreme and stays. The thing that normally holds the mind "
-      + "together has given way, so there is no steady middle to come back to. "
-      + "(Turn the mood regulator up to see a swing instead of a stuck collapse.)";
-  else {
-    body = "This is the overall state over time. It settles to a steady level and "
-      + "holds there, wobbling a little with random noise -- nothing builds, nothing "
-      + "tips. A regulator doing its job.";
-    var lean = stress + (stressJitter > 0 ? stressLean : 0);
-    if(Math.abs(lean) > 1e-9)
-      body += (lean > 0
-        ? " The outside stressor has lifted that resting level up, but it is still "
-          + "one steady level -- shifted, not swinging or stuck."
-        : " The outside stressor has pressed that resting level down, but it is "
-          + "still one steady level -- shifted, not swinging or stuck.");
-  }
-  return {svgs:[svg], title:"The state over time", body:body};
-}
-
-function viewIntegration(p){
-  p.noise = noisy ? INTEG_NOISE_ON : INTEG_NOISE_OFF;
-  var n=12, T=1000.0;
-  var g0 = linspace(0.45, 0.55, n);   // spread starts so channels can split
-  var r = simulate(p, T, n, stressDrive(), g0, 0.5, gaussFactory(p.seed));
-  var half = Math.floor(r.g.length/2), spreads=[];
-  for(var s=half;s<r.g.length;s++) spreads.push(pstdev(r.g[s]));
-  var coherent = mean(spreads) < 0.1;
-  // Within a coherent field, is the shared level steady (baseline) or swinging
-  // (bipolar)? And if steady, does it rest near the middle (healthy) or has a
-  // strong stressor pinned the whole field together at one extreme (captured)?
-  var meanField = r.g.map(function(row){ return mean(row); }).slice(half);
-  var swinging = (Math.max.apply(null, meanField) - Math.min.apply(null, meanField)) > 0.3;
-  var fieldLevel = mean(meanField);
-  var pinned = !swinging && (fieldLevel > 0.65 || fieldLevel < 0.35);
-  var wide = downsample(r.g, 240), mat = [];
-  for(var ch=0;ch<n;ch++){ mat.push(wide.map(function(row){ return row[ch]; })); }
-  var svg = svgHeatmap("Streams of experience over time (bright = flooded, dark = flat)", mat);
-  var body;
-  if(!coherent)
-    body = "Each row is a different stream of experience -- a sense, a train of "
-      + "thought. Here they come apart, each settling into its own state and "
-      + "staying there, with nothing tying them into a single whole. The bright "
-      + "rows are the flooding arm (over-weighted, salience landing everywhere -- "
-      + "positive symptoms) and the dark rows the collapse arm (starved and quiet "
-      + "-- negative symptoms), running at the same time: one fault showing both "
-      + "arms together, not a mind that is simply flooded or simply blank. No "
-      + "shared mood, no one coherent mind -- the binding has failed, and unlike a "
-      + "mood swing it does not knit back together on its own.";
-  else if(swinging)
-    body = "Each row is a different stream of experience -- a sense, a train of "
-      + "thought. Here they all move together as one: a single mood or tone laid "
-      + "over everything, swinging and returning as a whole. Even as it swings, "
-      + "the mind stays one integrated thing. That is the bipolar picture -- the "
-      + "level is unstable, but the mind is still whole.";
-  else if(pinned)
-    body = "Each row is a different stream of experience -- a sense, a train of "
-      + "thought. They still move together as one, so the field is coherent -- but "
-      + "a strong outside stressor has driven the whole field into the same extreme, "
-      + (fieldLevel > 0.65 ? "every module flooded at once" : "every module gone quiet at once")
-      + " rather than resting at the middle. One field, but pinned at "
-      + (fieldLevel > 0.65 ? "flood" : "collapse") + " by the pressure, not where a "
-      + "healthy mind sits. Ease the stressor back and it settles toward the middle again.";
-  else
-    body = "Each row is a different stream of experience -- a sense, a train of "
-      + "thought. Here they all move together as one, holding near a steady shared "
-      + "middle: a single calm field, not twelve separate states. The faint flicker "
-      + "is each module feeling the random stressor on its own, but the binding "
-      + "keeps them moving together. This is the healthy picture -- one integrated "
-      + "mind, resting where it should.";
-  return {svgs:[svg], title:"One mind, or many?", body:body};
-}
-
-function viewProfileAdhd(p){
-  var delay = linspace(0,10,41);
-  var weight = delay.map(function(d){ return settle(p, 4.0*(1.0/(1.0+p.k*d) - 0.5), 0.5); });
-  var svg = svgLines("How much pull, by how soon it pays off",
-    "reward delay  d", "weight  g*(d)",
-    [{label:"pull", xs:delay, ys:weight}]);
-  var body = "This is how much pull each option has, depending on how soon it pays "
-    + "off. When the future is discounted steeply, whatever pays off right now "
-    + "grabs nearly all the weight, while anything whose payoff is far away gets "
-    + "almost none -- both at the same time, all the time. That one setting "
-    + "explains the puzzle of ADHD: the very same person is grabbed by what is "
-    + "immediate (distractible, impulsive, or locked onto something engaging) and "
-    + "cannot get started on what matters later (the dull but important task feels "
-    + "impossible). It is not two problems, and it does not come and go -- it is "
-    + "one fixed shape. Make the discounting steeper and the curve drops off "
-    + "sooner.";
-  return {svgs:[svg], title:"ADHD: pulled to the now", body:body};
-}
-
-function viewProfileAutism(p){
-  var vol = linspace(0,1,41);
-  var driveOpt = vol.map(function(v){ return 3.0*(1.0-2.0*v); });
-  var gOpt = driveOpt.map(function(d){ return settle(p, d, 0.5); });
-  var realized = driveOpt.map(function(d){ return settle(p, p.lam*d, 0.5); });
-  var mismatch = vol.map(function(v,i){ return realized[i]-gOpt[i]; });
-  var stuck = (Math.max.apply(null,mismatch) - Math.min.apply(null,mismatch)) > 0.1;
-  var svg = svgLines("Does the response fit the moment?",
-    "volatility  v  (0 steady, 1 changing)", "gain mismatch  g - g*",
-    [{label:"mismatch", xs:vol, ys:mismatch}]);
-  var body = stuck
-    ? "This is whether the strength of response matches what each situation needs. "
-      + "Normally it adjusts -- turning up when the world is steady and "
-      + "predictable, easing off when it is changing fast. When that adjustment is "
-      + "stuck, the same fixed setting is too strong in fast-changing situations "
-      + "(overwhelm -- the painful loudness of a busy room, too much getting "
-      + "through) and too weak in steady ones (missing things others would catch). "
-      + "Both at once, as a fixed profile, not a swing. It is one dial set once and "
-      + "held, which is why the over- and under-reacting sit side by side in the "
-      + "same person. Raise the flexibility and the mismatch melts away."
-    : "This is whether the strength of response matches what each situation needs. "
-      + "With a flexible setting it tracks the world almost perfectly -- turning up "
-      + "when things are steady, easing off when they change -- so the mismatch "
-      + "stays near zero everywhere. Lower the flexibility to see the stuck "
-      + "profile that the autism setting holds.";
-  return {svgs:[svg], title:"Autism: a response that won't shift", body:body};
-}
-
-// ---- part two views: the coalition layer -----------------------------------
-
-function viewCondense(){
-  var n=24, steps=2400, alphas=linspace(0.6,1.8,16);
-  var conc = alphas.map(function(a){
-    var s=0; for(var seed=0;seed<3;seed++) s += preferentialAttachment(n,a,steps,mulberry32(seed+1))[0];
-    return s/3;
-  });
-  var crit=null; for(var i=0;i<alphas.length;i++){ if(conc[i]>0.5){ crit=alphas[i]; break; } }
-  var svg1 = svgLines("How concentrated the field gets, as recruitment steepens",
-    "recruitment gain (how steeply standing rises with size)",
-    "largest coalition's share",
-    [{label:"concentration", xs:alphas, ys:conc}],
-    {hlines:[{y:0.5, label:"half the mass in one", color:"#888"}],
-     notes: crit!=null ? [{x:crit, y:0.66, text:"condensation", color:"#b0282d", anchor:"middle"}] : []});
-  var lo = preferentialAttachment(n,0.7,steps,mulberry32(1));
-  var hi = preferentialAttachment(n,1.6,steps,mulberry32(1));
-  var ranks = []; for(var i=0;i<n;i++) ranks.push(i+1);
-  var svg2 = svgLines("The mass across coalitions (ranked largest first)",
-    "coalition rank", "share of the mass",
-    [{label:"fluid", xs:ranks, ys:lo, color:"#2ca02c"},
-     {label:"condensed", xs:ranks, ys:hi, color:"#d62728"}], {markers:true});
-  var body = "A module is not an atom: it is a coalition of sub-units, and a sub-unit "
-    + "does better attached to a coalition that wins the channel often. So sub-units "
-    + "flow toward standing, and how steeply standing rises with a coalition's size -- "
-    + "the recruitment gain -- decides everything. Low gain (left, green) keeps the mass "
-    + "fluid, spread across many coalitions of similar size: a plural field. Past a "
-    + "critical gain it condenses (right, red): one coalition grabs a finite fraction of "
-    + "the mass and the rest empty out. That condensation is the monopoly the first layer "
-    + "had to assume -- here it is derived as a phase, the winner-take-all of preferential "
-    + "attachment.";
-  return {svgs:[svg1, svg2], title:"Recruitment: when the field condenses", body:body};
-}
-
-function viewRelapse(){
-  var bmax=4.0, nPts=121, ups=linspace(-bmax,bmax,nPts), downs=ups.slice().reverse();
-  function sweep(gamma){
-    var phi=condense(gamma, ups[0], 0.02), up=[], dn=[];
-    ups.forEach(function(b){ phi=condense(gamma,b,phi); up.push(phi); });
-    downs.forEach(function(b){ phi=condense(gamma,b,phi); dn.push(phi); });
-    return {up:up, dn:dn, area:loopArea(ups.concat(downs), up.concat(dn))};
-  }
-  var hi=sweep(8), lo=sweep(2);
-  var loop = ups.map(function(x,i){return [x,hi.up[i]];}).concat(downs.map(function(x,i){return [x,hi.dn[i]];}));
-  var svg1 = svgLines("Bandwagon recruitment (supercritical): capture relapses",
-    "pressure toward one coalition", "largest coalition's share",
-    [{label:"building up", xs:ups, ys:hi.up}, {label:"easing back", xs:downs, ys:hi.dn}],
-    {fills:[{points:loop, color:"rgba(214,39,40,0.10)"}],
-     arrows:[{series:0,fracs:[0.34,0.6]},{series:1,fracs:[0.34,0.6]}],
-     notes:[{x:0,y:0.5,text:"same pressure -> two states",color:"#b0282d"}]});
-  var svg2 = svgLines("Proportional recruitment (subcritical): no relapse",
-    "pressure toward one coalition", "largest coalition's share",
-    [{label:"building up", xs:ups, ys:lo.up}, {label:"easing back", xs:downs, ys:lo.dn}],
-    {arrows:[{series:0,fracs:[0.4]},{series:1,fracs:[0.4]}]});
-  var body = "Superlinearity gives condensation, but the first layer needs more: it needs "
-    + "the fold, the all-or-none capture that resists climbing back and so relapses. That "
-    + "asks recruitment to be a bandwagon -- joining a coalition pays more the more have "
-    + "already joined, a coordination (stag hunt) one level down. Top: with a bandwagon, "
-    + "raise the pressure toward one coalition and the field stays fluid, then jumps to "
-    + "condensed; ease it back and it stays condensed well past where it tipped, clearing "
-    + "only when the pressure drops far below (the shaded gap). That hysteresis is relapse. "
-    + "Bottom: proportional recruitment slides on and off with no gap. So relapse is the "
-    + "signature of bandwagon recruitment -- a capture that came on gradually and reversed "
-    + "gradually would be evidence against it.";
-  return {svgs:[svg1, svg2], title:"Why capture relapses", body:body};
-}
-
-function viewPhases(){
-  var gains=linspace(1,8,30), cs=linspace(0,3,13);
-  var kappa=gains.map(function(g){ return condense(g,0,0.9); });
-  var sigma=cs.map(function(c){
-    var p=defaults(); p.beta=8; p.ka=2; p.c=c; p.noise=0.05;
-    var g0=linspace(0.4,0.6,8);
-    var r=simulate(p,400,8,null,g0,0.5,gaussFactory(0));
-    var half=Math.floor(r.g.length/2), sp=[];
-    for(var s=half;s<r.g.length;s++) sp.push(pstdev(r.g[s]));
-    return mean(sp);
-  });
-  var grid=[];                                  // grid[r] = row at cs[r] (low to high)
-  for(var r=0;r<cs.length;r++){
-    var row=[];
-    for(var c=0;c<gains.length;c++){
-      row.push(kappa[c]>0.6 ? 2 : (sigma[r]>0.1 ? 1 : 0));
-    }
-    grid.push(row);
-  }
-  var svg = svgPhaseMap("Capture against integration",
-    "recruitment gain (drives condensation)", "integration (holds the field)",
-    gains, cs, grid);
-  var body = "What this layer actually derives is one boundary: capture (red), the high-gain "
-    + "phase where one coalition condenses the mass, the monopoly part one had to posit. That "
-    + "is recruitment's to draw. The other axis is part one's, not this layer's: when the "
-    + "integrating coupling is too weak the field comes apart -- fragmentation (purple), "
-    + "anarchy -- which the recruitment slice does NOT derive, shown here only to place capture "
-    + "against it. Health (green) is the corner where the gain is subcritical and integration "
-    + "holds, the field plural and yet coherent. So read this as orientation, not as three "
-    + "phases all falling out of recruitment: the fold is the layer's result, the coming-apart "
-    + "is part one's, and the swing (bipolar's Hopf) sits on neither axis here.";
-  return {svgs:[svg], title:"Capture against integration", body:body};
-}
-
-var RUNNERS = {
-  fp: viewFp, sweep: viewSweep, recover: viewRecover, series: viewSeries,
-  integration: viewIntegration, profile_adhd: viewProfileAdhd, profile_autism: viewProfileAutism,
-  condense: viewCondense, relapse: viewRelapse, phasemap: viewPhases
+// ===========================================================================
+// MODEL  (single source of dynamics; faithful to CLAUDE.md, plus one flagged
+// addition: the feast/famine environment term `env` on the fill, and a small
+// always-on noise. Everything else is the spec's reference step.)
+// ===========================================================================
+var CONFIG = {
+  n:8, dt:0.01, substeps:8,
+  eta:1.6, lambda:2.0, c:1.4,
+  G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0,
+  delta:0.6, phi:1.0,
+  s:0.8, rho0:1.0, rhoMin:0.05,
+  tauMin:0.2, tauMax:6.0, eps:1e-6,
+  yR:0.85,            // radius of the moving evidence (reachable when the field concentrates)
+  // additions (flagged): environment + noise
+  env:0.0,            // feast (+1) .. famine (-1); reproductive surplus/deficit on the fill
+  envGain:0.85,       // how hard feast/famine moves the fill's setpoint
+  sigmaF:0.035,       // always-on environmental noise on the fill (the "randomness")
+  sigmaPi:0.015,      // small noise in the contest so winners can be unseated
+  sigmaY:0.20,        // observation noise on the evidence; a short horizon chases it (ADHD)
+  // diagnostics thresholds (one place; tunable)
+  band:0.40,          // euthymic half-band on F
+  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45,
+  ewsWin:300
+};
+var HEALTHY = {G:1.0, kP:1.0, delta:0.6, phi:1.0, env:0.0};
+var RANGES = {
+  G:[0.05,8.0], kP:[0.0,2.0], delta:[0.02,1.0], phi:[0.0,2.0], env:[-1,1], speed:[0.1,4]
 };
 
-// Which knobs each view actually reads. A view computes with only these; the
-// rest stay at their defaults, so (for example) switching to `sweep` from the
-// bipolar preset still shows a clean hysteresis loop rather than dragging the
-// oscillator's ka along. The UI dims the knobs a view ignores using this map.
-var VIEW_USES = {
-  fp: ["beta", "ka"], sweep: ["beta"], recover: [],
-  series: ["beta", "ka", "c"],
-  integration: ["beta", "ka", "c"],
-  profile_adhd: ["k"], profile_autism: ["lam"]
-};
-
-// Whether a view reads a single channel (one bid's gain) or the whole field (all
-// channels at once). A single channel can only be high or low; the flooding and
-// collapse arms show together only across the field, which is the integration view.
-var VIEW_SCOPE = {
-  series: "one", fp: "one", sweep: "one", recover: "one",
-  profile_adhd: "one", profile_autism: "one",
-  integration: "field",
-  condense: "layer", relapse: "layer", phasemap: "layer"
-};
-
-function runView(view, state){
-  var uses = VIEW_USES[view] || [];
-  var p = defaults();
-  ["beta", "ka", "c", "k", "lam"].forEach(function(key){
-    if(uses.indexOf(key) >= 0 && state[key] !== undefined) p[key] = state[key];
-  });
-  p.adapt = (state.adapt !== undefined) ? state.adapt : 1;
-  return (RUNNERS[view] || viewFp)(p);
+function randn(){ // Box-Muller
+  var u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
 }
 
-// ---- UI --------------------------------------------------------------------
+function makeU(n, seed){
+  var u=[]; for(var i=0;i<n;i++){ var a=2*Math.PI*i/n + seed; u.push([Math.cos(a),Math.sin(a)]); } return u;
+}
 
-// Intrinsic noise (xi): "add randomness" picks a lifelike level or a small floor.
-// Fragmentation and coherence are genuinely noise-driven, so the floor is small
-// but not zero. Series/integration set their own from `noisy`.
-var noisy = true;
-var SERIES_NOISE_ON = 0.12, SERIES_NOISE_OFF = 0.012;
-var INTEG_NOISE_ON  = 0.08, INTEG_NOISE_OFF  = 0.01;
+function initState(P){
+  var n=P.n, p=new Float64Array(n), rho=new Float64Array(n);
+  for(var i=0;i<n;i++){ p[i]=1/n; rho[i]=P.rho0; }
+  return {p:p, F:P.Fstar, z:0, rho:rho, yhat:[0,0], m:[0,0], pibar:0, theta:0};
+}
 
-// Environmental stressor: a steady push plus a fresh per-tick fluctuation, shared
-// across channels (it is the external drive I, made time-varying). Applied to the
-// dynamic views (series, integration); 0/0 means no stressor.
-var stress = 0, stressJitter = 0.3, stressLean = 0;
+// preallocated scratch (no per-frame alloc in the hot path)
+var _pi=null, _dp=null, _drho=null;
+function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _dp=new Float64Array(n); _drho=new Float64Array(n);} }
 
-var KNOBS = [
-  {key:"beta", name:"Self-reinforcement (winning breeds winning)", min:0, max:10, step:0.05},
-  {key:"ka", name:"Mood-regulator strength", min:0, max:8, step:0.1},
-  {key:"c", name:"How tightly the mind coheres as one", min:0, max:4, step:0.05},
-  {key:"k", name:"How steeply the future is discounted (ADHD)", min:0.05, max:1.5, step:0.01},
-  {key:"lam", name:"How flexibly attention adapts (autism)", min:0, max:1, step:0.01}
-];
-var STRESS_KNOBS = [
-  {key:"stress", name:"Stressor (steady push)", min:-3, max:3, step:0.1},
-  {key:"stressJitter", name:"Stressor jitter (per tick)", min:0, max:2, step:0.05},
-  {key:"stressLean", name:"Stressor lean (up / down)", min:-1, max:1, step:0.05}
-];
-var DEF = {beta:2, ka:0, c:1, k:0.2, lam:1, adapt:1};
-// The homeostat (ka) is a live control in every condition, so the bar moves
-// everywhere; only bipolar's ka is high enough (with beta) to cross the Hopf.
-var PRESETS = {
-  baseline:{beta:2, ka:2}, schizophrenia:{beta:8, c:0.2, ka:2},
-  bipolar:{beta:8, c:3, ka:6}, adhd:{beta:2, ka:2, k:0.95}, autism:{beta:2, ka:2, lam:0.1}
-};
-// The five conditions are the primary control. Each shows the graphs that tell
-// its story honestly: a malfunction shows its dynamics; a miscalibration leads
-// with its fixed profile, with the (normal) dynamics shown after as contrast.
-// Bipolar omits the hysteresis sweep on purpose -- that is the fold's stickiness,
-// which is the schizophrenia mechanism, not bipolar's Hopf.
-var CONDITIONS = [
-  {key:"baseline", label:"Healthy baseline"},
-  {key:"schizophrenia", label:"Schizophrenia"},
-  {key:"bipolar", label:"Bipolar"},
-  {key:"adhd", label:"ADHD"},
-  {key:"autism", label:"Autism"}
-];
-var CONDITION_VIEWS = {
-  baseline:      ["series", "fp", "integration"],
-  schizophrenia: ["series", "fp", "integration", "sweep", "recover"],
-  bipolar:       ["series", "fp", "integration", "recover"],
-  adhd:          ["profile_adhd", "series", "fp"],
-  autism:        ["profile_autism", "series", "fp"],
-  custom:        ["series", "fp", "integration", "sweep", "recover", "profile_adhd", "profile_autism"],
-  p2_condense:   ["condense"],
-  p2_relapse:    ["relapse"],
-  p2_phases:     ["phasemap"]
-};
-// Part two: the coalition layer, one level below the modules.
-var P2_CONDITIONS = [
-  {key:"p2_condense", label:"Condensation"},
-  {key:"p2_relapse",  label:"Relapse"},
-  {key:"p2_phases",   label:"Phase map"}
-];
-var CONDITION_INTROS = {
-  baseline: "<strong>Healthy baseline.</strong> A working allocator: it rests at a steady "
-    + "middle and slides back when nudged. This is what 'working' looks like -- the "
-    + "reference the conditions depart from.",
-  schizophrenia: "<strong>Schizophrenia -- a malfunction of coherence.</strong> The "
-    + "integrating gain has folded: the field loses its single shared state, fragments "
-    + "across channels, and settles into a captured state rather than returning.",
-  bipolar: "<strong>Bipolar -- a malfunction of level.</strong> The regulator that holds "
-    + "mood level has started to oscillate: a single normal middle (euthymia) that has lost "
-    + "its damping, so the field swings between mania (the flooding arm) and depression (the "
-    + "collapse arm) and returns -- the one fault where the two arms take turns in time "
-    + "rather than appearing together.",
-  adhd: "<strong>ADHD -- a miscalibration, not a malfunction.</strong> Both controls work "
-    + "and the contest stays honest; only the scoring rule is off. Time is discounted "
-    + "steeply, so one fixed setting over-weights the immediate and starves the distant. "
-    + "(The dynamics below are normal -- the fault is the fixed profile, not a swing.)",
-  autism: "<strong>Autism -- a miscalibration, not a malfunction.</strong> Both controls "
-    + "work; only the flexibility of response is off. The gain is held fixed instead of "
-    + "tracking the situation, too strong in changing settings and too weak in steady ones. "
-    + "(The dynamics below are normal -- the fault is the fixed profile, not a swing.)",
-  custom: "<strong>Custom settings.</strong> Your own dials, with all seven views shown.",
-  p2_condense: "<strong>Part two: recruitment.</strong> A module is itself a coalition of "
-    + "sub-units that flow toward standing. How steeply standing rises with size -- the "
-    + "recruitment gain -- decides whether the field stays fluid or condenses onto one "
-    + "coalition. The monopoly part one had to posit becomes the condensed phase of a dynamics.",
-  p2_relapse: "<strong>Part two: relapse.</strong> The fold part one assigns to capture "
-    + "survives this layer only if recruitment is a bandwagon (joining pays more the more "
-    + "have joined). Then condensation is first-order and hysteretic -- which is what relapse is.",
-  p2_phases: "<strong>Part two: capture against integration.</strong> The recruitment layer "
-    + "derives one boundary -- capture, the condensation onto one coalition. Crossed here with "
-    + "part one's integration axis (whose failure is fragmentation, which recruitment does not "
-    + "derive) for orientation, with health where the gain is subcritical and integration holds."
-};
+function step(s, P, u, y, dt){
+  var n=P.n; ensureScratch(n);
+  // discounted evidence (the horizon set by the discount rate). The system sees a
+  // noisy observation of the world; a short horizon chases that noise (ADHD).
+  var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
+  s.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-s.yhat[0]);
+  s.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-s.yhat[1]);
+  // shared state m (precision-weighted consensus)
+  var mx=0,my=0,w=0;
+  for(var i=0;i<n;i++){ var wi=s.p[i]*s.rho[i]; mx+=wi*u[i][0]; my+=wi*u[i][1]; w+=wi; }
+  mx/=w; my/=w;
+  // payoffs
+  var pibar=0;
+  for(i=0;i<n;i++){
+    var ddm=(u[i][0]-mx)*(u[i][0]-mx)+(u[i][1]-my)*(u[i][1]-my);
+    var ddy=(u[i][0]-s.yhat[0])*(u[i][0]-s.yhat[0])+(u[i][1]-s.yhat[1])*(u[i][1]-s.yhat[1]);
+    _pi[i]=-0.5*P.G*s.rho[i]*ddm - 0.5*P.lambda*ddy - P.c*s.p[i] + P.sigmaPi*randn();
+    pibar+=s.p[i]*_pi[i];
+  }
+  // replicator (division) + precision outer loop
+  for(i=0;i<n;i++){
+    _dp[i]=P.eta*s.p[i]*(_pi[i]-pibar);
+    var ddy2=(u[i][0]-s.yhat[0])*(u[i][0]-s.yhat[0])+(u[i][1]-s.yhat[1])*(u[i][1]-s.yhat[1]);
+    var rhoT=P.rho0*Math.exp(-ddy2/(P.s*P.s));
+    _drho[i]=P.phi*(rhoT-s.rho[i]);
+  }
+  // fill (homeostat PI). Feast/famine shifts the *setpoint* the homeostat defends:
+  // feast(+) = reproductive surplus, the fill grows to a richer target; famine(-) starves it.
+  var Fset=P.Fstar*(1+P.envGain*P.env);
+  var theta=P.theta0+P.kP*(s.F-Fset)+P.kI*s.z;
+  var dF=s.F*(P.a*pibar - theta + P.sigmaF*randn());  // sigmaF = always-on randomness
+  var dz=s.F-Fset;
+  // integrate
+  var sum=0;
+  for(i=0;i<n;i++){ s.p[i]=Math.max(P.eps,s.p[i]+dt*_dp[i]); sum+=s.p[i]; s.rho[i]=Math.max(P.rhoMin,s.rho[i]+dt*_drho[i]); }
+  for(i=0;i<n;i++) s.p[i]/=sum;
+  s.F=Math.max(0,s.F+dt*dF);
+  s.z=s.z+dt*dz;
+  s.m[0]=mx; s.m[1]=my; s.pibar=pibar; s.theta=theta; s.Fset=Fset;
+  return s;
+}
 
-var state = Object.assign({}, DEF);
-var cond = "bipolar";
+// ===========================================================================
+// DIAGNOSTICS  (order parameters, rolling early-warning, regime classifier)
+// ===========================================================================
+function herfindahl(p){ var h=0; for(var i=0;i<p.length;i++) h+=p[i]*p[i]; return h; }
+function dist(a,b){ var dx=a[0]-b[0],dy=a[1]-b[1]; return Math.sqrt(dx*dx+dy*dy); }
+function variance(a){ var m=0,k=a.length; for(var i=0;i<k;i++)m+=a[i]; m/=k; var v=0; for(i=0;i<k;i++){var d=a[i]-m; v+=d*d;} return v/k; }
+function lag1ac(a){
+  var k=a.length; if(k<3) return 0; var m=0; for(var i=0;i<k;i++)m+=a[i]; m/=k;
+  var num=0,den=0; for(i=0;i<k-1;i++) num+=(a[i]-m)*(a[i+1]-m);
+  for(i=0;i<k;i++){var d=a[i]-m; den+=d*d;} return den>1e-12? num/den : 0;
+}
+function classify(d, P){
+  // priority order; returns {label, alert}
+  if(d.H > P.H_collapse) return {label:"division collapsed: monopoly", alert:true};
+  if(d.ampF > P.amp_osc)  return {label:"fill oscillating: limit cycle", alert:true};
+  if(d.H < P.H_scatter)   return {label:"division scattered", alert:true};
+  if(d.err > P.errLost)   return {label:"tracking lost", alert:true};
+  if(Math.abs(d.F-P.Fstar) > P.band) return {label:(d.F>P.Fstar?"fill flooded":"fill starved"), alert:true};
+  return {label:"healthy: plural, tracking", alert:false};
+}
+
+// ===========================================================================
+// RENDER  (all canvas drawing)
+// ===========================================================================
+function fitCanvas(cv){
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+  var w=cv.clientWidth, h=cv.clientHeight;
+  if(cv._w===w && cv._h===h && cv._dpr===dpr) return cv.getContext("2d");
+  cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  cv._w=w; cv._h=h; cv._dpr=dpr;
+  var ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); return ctx;
+}
+function clear(ctx,w,h){ ctx.fillStyle="#0a0f15"; ctx.fillRect(0,0,w,h); }
+
+function drawChannel(cv, s, u, y, layer){
+  var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  var cx=w/2, cy=h/2, R=Math.min(w,h)*0.42;
+  function X(p){ return cx+p[0]*R; } function Y(p){ return cy-p[1]*R; }
+  // grid: unit circle + crosshairs
+  ctx.strokeStyle="#102029"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,R*0.5,0,2*Math.PI); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
+  // winner
+  var win=0; for(var i=1;i<u.length;i++) if(s.p[i]>s.p[win]) win=i;
+  // u_i points, sized by p
+  for(i=0;i<u.length;i++){
+    var r=3+18*s.p[i];
+    ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r,0,2*Math.PI);
+    ctx.fillStyle = i===win ? "rgba(255,176,0,.9)" : "rgba(120,150,170,.5)";
+    ctx.fill();
+    if(i===win){ ctx.strokeStyle="rgba(255,176,0,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r+5,0,2*Math.PI); ctx.stroke(); }
+  }
+  // yhat (discounted evidence) shown faint in fit layer
+  if(layer==="3"||layer==="all"){
+    ctx.strokeStyle="rgba(200,182,90,.8)"; ctx.lineWidth=1.5;
+    var yh=s.yhat; ctx.beginPath(); ctx.arc(X(yh),Y(yh),5,0,2*Math.PI); ctx.stroke();
+    ctx.fillStyle="rgba(200,182,90,.85)"; ctx.font="10px monospace"; ctx.fillText("yhat",X(yh)+8,Y(yh)+3);
+  }
+  // evidence y (the world): hollow cyan ring
+  ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(X(y),Y(y),7,0,2*Math.PI); ctx.stroke();
+  // line m->y to read tracking
+  ctx.strokeStyle="rgba(54,182,200,.35)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(X(s.m),Y(s.m)); ctx.lineTo(X(y),Y(y)); ctx.stroke();
+  // shared state m: filled accent
+  ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(X(s.m),Y(s.m),5,0,2*Math.PI); ctx.fill();
+  // legend
+  ctx.font="10px monospace"; ctx.textBaseline="alphabetic";
+  ctx.fillStyle="#ffb000"; ctx.fillText("m shared state", 10, h-22);
+  ctx.fillStyle="#36b6c8"; ctx.fillText("y world", 10, h-10);
+}
+
+function drawDivision(cv, s, layer){
+  var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  var n=s.p.length, pad=10, top=26, bw=(w-2*pad)/n;
+  var win=0; for(var i=1;i<n;i++) if(s.p[i]>s.p[win]) win=i;
+  // baseline at 1/n
+  var base=top, H=h-top-14;
+  ctx.strokeStyle="#16222c"; ctx.setLineDash([3,3]);
+  var y1n=base+H*(1-1/n); ctx.beginPath(); ctx.moveTo(pad,y1n); ctx.lineTo(w-pad,y1n); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.fillText("1/n", w-pad-20, y1n-2);
+  for(i=0;i<n;i++){
+    var bh=H*s.p[i], x=pad+i*bw+1;
+    ctx.fillStyle = i===win ? "#ffb000" : "#2f4250";
+    ctx.fillRect(x, base+H-bh, bw-2, bh);
+  }
+  if(layer==="2"||layer==="all"){
+    ctx.fillStyle="#9fb2c0"; ctx.font="10px monospace";
+    ctx.fillText("each bar = a coalition's mass; collapse onto one = condensation", 10, h-4);
+  }
+}
+
+function drawFill(cv, s, P){
+  var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  var pad=24, top=24, bot=h-16, gx=w/2;
+  var Fmax=Math.max(2.6, P.Fstar+1.8);
+  function Y(F){ return bot-(bot-top)*(Math.min(F,Fmax)/Fmax); }
+  // euthymic band
+  ctx.fillStyle="rgba(55,210,122,.10)";
+  ctx.fillRect(gx-26, Y(P.Fstar+P.band), 52, Y(P.Fstar-P.band)-Y(P.Fstar+P.band));
+  ctx.strokeStyle="rgba(55,210,122,.4)"; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(gx-30,Y(P.Fstar)); ctx.lineTo(gx+30,Y(P.Fstar)); ctx.stroke(); ctx.setLineDash([]);
+  // feast/famine setpoint (where the environment has moved the target)
+  if(P.env && Math.abs(P.env)>0.02){
+    var Fset=P.Fstar*(1+P.envGain*P.env);
+    ctx.strokeStyle="#ffb000"; ctx.setLineDash([2,3]);
+    ctx.beginPath(); ctx.moveTo(gx-30,Y(Fset)); ctx.lineTo(gx+30,Y(Fset)); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // bar
+  var flooded=s.F>P.Fstar+P.band, starved=s.F<P.Fstar-P.band;
+  ctx.fillStyle = flooded||starved ? "#ff4d57" : "#37d27a";
+  ctx.fillRect(gx-16, Y(s.F), 32, bot-Y(s.F));
+  // labels
+  ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.textAlign="center";
+  ctx.fillText("feast", gx, top-6);
+  ctx.fillText("famine", gx, bot+12);
+  ctx.fillStyle="#9fb2c0"; ctx.fillText("F="+s.F.toFixed(2), gx, Y(s.F)-6);
+  ctx.textAlign="left";
+}
+
+// scrolling traces
+function drawTraces(cv, buf, P, layer){
+  var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  var pad=6, top=24, H=h-top-6, x0=pad, x1=w-pad;
+  // grid
+  ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
+  for(var g=0;g<=4;g++){ var gy=top+H*g/4; ctx.beginPath(); ctx.moveTo(x0,gy); ctx.lineTo(x1,gy); ctx.stroke(); }
+  var N=buf.F.length; if(N<2) return;
+  function plot(arr, lo, hi, col){
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
+    for(var i=0;i<N;i++){
+      var v=(arr[i]-lo)/(hi-lo); v=v<0?0:(v>1?1:v);
+      var x=x0+(x1-x0)*i/(N-1), y=top+H*(1-v);
+      if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  var show={F:true,H:true,err:true};
+  if(layer==="2"){ show={F:false,H:true,err:false}; }
+  else if(layer==="3"){ show={F:false,H:false,err:true}; }
+  var Fmax=Math.max(2.6,P.Fstar+1.8);
+  if(show.F)   plot(buf.F, 0, Fmax, "#37d27a");
+  if(show.H)   plot(buf.H, 0, 1, "#ffb000");
+  if(show.err) plot(buf.err, 0, 1.6, "#36b6c8");
+  // legend (right-aligned, clear of the panel caption at top-left)
+  ctx.font="10px monospace"; ctx.textAlign="right";
+  var rx=x1-4;
+  if(show.err){ ctx.fillStyle="#36b6c8"; ctx.fillText("err", rx, top-9); rx-=30; }
+  if(show.H){ ctx.fillStyle="#ffb000"; ctx.fillText("H", rx, top-9); rx-=18; }
+  if(show.F){ ctx.fillStyle="#37d27a"; ctx.fillText("F", rx, top-9); }
+  ctx.textAlign="left";
+}
+
+// ===========================================================================
+// UI  (controls, layer picker, rAF loop)
+// ===========================================================================
+var P=Object.assign({}, CONFIG);
+var seed=0, u=makeU(P.n, seed);
+var s=initState(P);
+var t=0, speed=1, paused=false, layer="1";
+var yJump=[0,0];
+
+function evidence(time){
+  // the world drifts slowly enough that a healthy field keeps continuous lock;
+  // two close frequencies make a slow Lissajous wander (not a trivial circle).
+  return [P.yR*Math.cos(0.05*time)+yJump[0], P.yR*Math.sin(0.063*time)+yJump[1]];
+}
+
+// rolling buffers
+var BUFLEN=420;
+var buf={F:[],H:[],err:[]};
+var ewsH=[], ewsF=[];
+
 function el(id){ return document.getElementById(id); }
 
-function buildConditionGroup(boxId, list){
-  var box = el(boxId);
-  list.forEach(function(c){
-    var b = document.createElement("button");
-    b.textContent = c.label; b.dataset.key = c.key;
-    b.onclick = function(){ cond = c.key; applyPreset(c.key); markConditions(); renderDashboard(); };
-    box.appendChild(b);
+function slider(host, key, label, sym, fmt, hint){
+  var rng=RANGES[key], healthy=HEALTHY[key];
+  host.innerHTML =
+    '<div class="row"><span class="name">'+label+' <em>'+sym+'</em></span><span class="val" id="v_'+key+'"></span></div>'
+    +'<input type="range" id="s_'+key+'" min="'+rng[0]+'" max="'+rng[1]+'" step="'+((rng[1]-rng[0])/200)+'">'
+    +'<div class="track"><div class="healthy" id="hb_'+key+'"></div></div>'
+    +(hint?'<div class="hint">'+hint+'</div>':'');
+  var inp=el("s_"+key), val=el("v_"+key);
+  inp.value = (key==="speed"?speed:P[key]);
+  function show(){ val.textContent = fmt(key==="speed"?speed:P[key]); }
+  inp.addEventListener("input", function(){
+    var v=parseFloat(inp.value);
+    if(key==="speed") speed=v; else P[key]=v;
+    show();
   });
-}
-function buildConditions(){
-  buildConditionGroup("conditions", CONDITIONS);
-  buildConditionGroup("conditions2", P2_CONDITIONS);
-}
-function markConditions(){
-  ["conditions", "conditions2"].forEach(function(id){
-    Array.prototype.forEach.call(el(id).children, function(b){
-      b.classList.toggle("active", b.dataset.key === cond);
-    });
-  });
-}
-function makeSlider(box, kn, onInput){
-  var wrap = document.createElement("div"); wrap.className="slider"; wrap.dataset.key=kn.key;
-  var row = document.createElement("div"); row.className="row";
-  var nm = document.createElement("span"); nm.className="name"; nm.textContent=kn.name;
-  var val = document.createElement("span"); val.className="val"; val.id="v_"+kn.key;
-  row.appendChild(nm); row.appendChild(val);
-  var inp = document.createElement("input");
-  inp.type="range"; inp.min=kn.min; inp.max=kn.max; inp.step=kn.step; inp.id="s_"+kn.key;
-  inp.oninput = function(){ onInput(parseFloat(inp.value), val); };
-  wrap.appendChild(row); wrap.appendChild(inp); box.appendChild(wrap);
-}
-function buildSliders(){
-  KNOBS.forEach(function(kn){
-    makeSlider(el("sliders"), kn, function(v, val){
-      state[kn.key] = v; val.textContent = v.toFixed(2);
-      cond = "custom"; markConditions(); scheduleDash();
-    });
-  });
-  // Stressor sliders drive the global environment; they modify whatever condition
-  // is selected, so they clear the cache and re-render but keep the condition.
-  STRESS_KNOBS.forEach(function(kn){
-    makeSlider(el("stressSliders"), kn, function(v, val){
-      if(kn.key === "stress") stress = v;
-      else if(kn.key === "stressJitter") stressJitter = v;
-      else stressLean = v;
-      val.textContent = v.toFixed(2);
-      dashCache = {}; scheduleDash();
-    });
-  });
-}
-function syncSliders(){
-  KNOBS.forEach(function(kn){ el("s_"+kn.key).value = state[kn.key]; el("v_"+kn.key).textContent = (+state[kn.key]).toFixed(2); });
-  el("s_stress").value = stress; el("v_stress").textContent = stress.toFixed(2);
-  el("s_stressJitter").value = stressJitter; el("v_stressJitter").textContent = stressJitter.toFixed(2);
-  el("s_stressLean").value = stressLean; el("v_stressLean").textContent = stressLean.toFixed(2);
-  el("adapt").checked = !!state.adapt;
-}
-function applyPreset(name){
-  state = Object.assign({}, DEF);
-  if(PRESETS[name]) Object.assign(state, PRESETS[name]);
-  state.adapt = el("adapt").checked ? 1 : 0;
-  syncSliders();
+  show();
+  // healthy band marker
+  if(healthy!==undefined){
+    var hb=el("hb_"+key); var f=(healthy-rng[0])/(rng[1]-rng[0]);
+    hb.style.left=Math.max(0,(f*100-6))+"%"; hb.style.width="12%";
+  }
 }
 
-// Recomputing every view is heavier than one, so dial edits are debounced rather
-// than run per animation frame. Condition clicks render immediately.
-var dashTimer = null;
-function scheduleDash(){ if(dashTimer) clearTimeout(dashTimer); dashTimer = setTimeout(renderDashboard, 160); }
+var f2=function(x){return x.toFixed(2);};
+slider(el("ctl-G"),"G","Integrating gain","G",f2,"too high: winner freezes, decouples from y (delusion). too low: winner wanders (disorganized).");
+slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"toward 0: the fill loses its damping and swings, flood to starvation (bipolar).");
+slider(el("ctl-delta"),"delta","Discount rate","d",f2,"too short: chases the instant, never holds a thread (ADHD).");
+slider(el("ctl-phi"),"phi","Precision flexibility","phi",f2,"toward 0: precision frozen, slow to re-track after a context shift (autism).");
+slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
+slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
 
-// The five conditions are fixed, so their dashboards are computed once and
-// cached; re-selecting one is then instant. Custom (dial edits) is never cached.
-var dashCache = {};
-var SCOPE_BADGE = {
-  one:   '<span class="scope scope-one">one channel</span>',
-  field: '<span class="scope scope-field">the whole field &middot; 12 channels</span>',
-  layer: '<span class="scope scope-layer">part two &middot; the coalition layer</span>'
-};
-function buildDashHTML(){
-  var views = CONDITION_VIEWS[cond] || CONDITION_VIEWS.custom;
-  var legend = (views.indexOf("condense") >= 0 || views.indexOf("relapse") >= 0 || views.indexOf("phasemap") >= 0)
-    ? 'These charts are tagged ' + SCOPE_BADGE.layer + ' -- they live one level below the modules, '
-      + 'in the contest among the sub-units that make a module up.'
-    : 'Each chart is tagged ' + SCOPE_BADGE.one + ' (a single bid\'s gain -- only ever high or low) or '
-      + SCOPE_BADGE.field + ' (all channels at once, where the flooding and collapse arms show together).';
-  var html = '<div class="dash-intro">' + (CONDITION_INTROS[cond] || CONDITION_INTROS.custom)
-    + '<div class="scope-legend">' + legend + '</div></div>';
-  views.forEach(function(vk){
-    var out;
-    try { out = runView(vk, state); } catch(e){ return; }
-    var scope = VIEW_SCOPE[vk] || "one";
-    html += '<div class="card card-' + scope + '"><div class="card-title">' + SCOPE_BADGE[scope]
-          + escapeHtml(out.title || "") + '</div>'
-          + '<div>' + out.svgs.join("") + '</div>'
-          + '<div class="card-body">' + escapeHtml(out.body || "") + '</div></div>';
+// layer picker
+function setLayer(L){
+  layer=L;
+  Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", b.dataset.layer===L); });
+  // show/hide panels
+  Array.prototype.forEach.call(document.querySelectorAll(".panel[data-layers]"), function(pan){
+    var set=pan.getAttribute("data-layers").split(" ");
+    pan.classList.toggle("hidden", set.indexOf(L)<0);
   });
-  return html;
+  // captions / notes per layer
+  var notes={
+    "1":"Layer 1, the contest. Coalitions bid for the one channel; the division p says who wins and how concentrated, the fill F how much competes. Drive a control out of range and a disorder falls out.",
+    "2":"Layer 2, the coalition layer. Read the division as mass: high concentration H is condensation onto one coalition (the monopoly). Raising the integrating gain past threshold collapses the field onto a single winner.",
+    "3":"Layer 3, what fit answers to. m is the shared state, y the world, yhat the discounted evidence the system actually scores against. Tracking error is fit. A short discount horizon chases y and loses the thread.",
+    "all":"All layers at once: the contest (division and fill), the coalition reading (concentration), and fit (m vs y vs yhat) together."
+  };
+  el("layerNote").textContent=notes[L];
+  el("capTrSub").textContent = L==="2"?"concentration H":(L==="3"?"tracking error":"F, concentration H, tracking error");
+  // force canvases to re-fit next frame
+  resizeAll();
 }
-function escapeHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function renderDashboard(){
-  if(cond !== "custom" && dashCache[cond]){ el("dashboard").innerHTML = dashCache[cond]; return; }
-  var html = buildDashHTML();
-  if(cond !== "custom") dashCache[cond] = html;
-  el("dashboard").innerHTML = html;
+Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setLayer(b.dataset.layer); }; });
+
+// buttons
+el("btnShift").onclick=function(){ var a=Math.random()*2*Math.PI; yJump=[0.55*Math.cos(a),0.55*Math.sin(a)]; };
+el("btnReseed").onclick=function(){ seed=Math.random()*2*Math.PI; u=makeU(P.n,seed); };
+var btnPause=el("btnPause");
+btnPause.onclick=function(){ paused=!paused; btnPause.textContent=paused?"run":"pause"; };
+el("btnStep").onclick=function(){ if(paused){ advance(); render(); } };
+
+function resizeAll(){ ["ch","div","fill","tr"].forEach(function(id){ var c=el(id); c._w=-1; }); }
+window.addEventListener("resize", resizeAll);
+
+// one model-time advance (a frame's worth)
+function advance(){
+  var steps=Math.max(1,Math.round(P.substeps*speed));   // speed scales throughput, dt stays fixed (stable)
+  for(var k=0;k<steps;k++){ t+=P.dt; step(s,P,u,evidence(t),P.dt); }
+  var H=herfindahl(s.p), y=evidence(t), err=dist(s.m,y);
+  buf.F.push(s.F); buf.H.push(H); buf.err.push(err);
+  if(buf.F.length>BUFLEN){ buf.F.shift(); buf.H.shift(); buf.err.shift(); }
+  ewsH.push(H); ewsF.push(s.F);
+  if(ewsH.length>P.ewsWin){ ewsH.shift(); ewsF.shift(); }
 }
 
-el("adapt").onchange = function(){ state.adapt = this.checked ? 1 : 0; cond = "custom"; markConditions(); scheduleDash(); };
-el("noisy").onchange = function(){ noisy = this.checked; dashCache = {}; renderDashboard(); };
+function rollAmp(arr){ if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
+function rollMean(arr){ if(!arr.length) return 0; var s=0,n=0; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ s+=arr[i]; n++; } return s/n; }
 
-var mathModal = el("mathModal");
-el("mathBtn").onclick = function(){ mathModal.hidden = false; };
-el("mathClose").onclick = function(){ mathModal.hidden = true; };
-mathModal.onclick = function(e){ if(e.target === mathModal) mathModal.hidden = true; };
-document.addEventListener("keydown", function(e){ if(e.key === "Escape") mathModal.hidden = true; });
+function updateDiag(){
+  var H=rollMean(buf.H);
+  var err=rollMean(buf.err);
+  var ampF=rollAmp(ewsF);
+  var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
+  var d={H:H, F:s.F, err:err, ampF:ampF, vH:vH};
+  var reg=classify(d,P);
+  var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
+  var rows=[
+    ["conc H", H.toFixed(3)+" / "+(1/P.n).toFixed(3)],
+    ["fill F", s.F.toFixed(3)+" (F*"+P.Fstar.toFixed(1)+")"],
+    ["fill amp", ampF.toFixed(3), ampF>P.amp_osc],
+    ["track err", err.toFixed(3), err>P.errLost],
+    ["fold EWS", "ac1 "+acH.toFixed(2)+" v"+vH.toFixed(3)],
+    ["Hopf EWS", "amp "+ampF.toFixed(2)+" v"+vF.toFixed(3)]
+  ];
+  var html="";
+  rows.forEach(function(r){ html+='<div class="d'+(r[2]?' warn':'')+'"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>'; });
+  el("diag").innerHTML=html;
+}
 
-buildConditions();
-buildSliders();
-applyPreset("bipolar");
-markConditions();
-renderDashboard();
+function render(){
+  drawChannel(el("ch"), s, u, evidence(t), layer);
+  if(layer!=="3") drawDivision(el("div"), s, layer);
+  if(layer!=="2") drawFill(el("fill"), s, P);
+  drawTraces(el("tr"), buf, P, layer);
+  updateDiag();
+}
+
+function loop(){
+  if(!paused) advance();
+  render();
+  requestAnimationFrame(loop);
+}
+setLayer("1");
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
