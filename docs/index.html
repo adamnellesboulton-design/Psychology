@@ -99,7 +99,6 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
   main{grid-template-columns:1fr; grid-template-rows:1fr auto}
   #side{max-height:46vh}
 }
-@media (prefers-reduced-motion:reduce){ canvas{} }
 </style>
 </head>
 <body>
@@ -191,7 +190,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 var CONFIG = {
   n:8, dt:0.01, substeps:8,
   eta:1.6, lambda:2.0, c:1.4,
-  G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0,
+  G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
   delta:0.6, phi:1.0,
   s:0.8, rho0:1.0, rhoMin:0.05,
   tauMin:0.2, tauMax:6.0, eps:1e-6,
@@ -268,7 +267,10 @@ function step(s, P, u, y, dt){
   for(i=0;i<n;i++){ s.p[i]=Math.max(P.eps,s.p[i]+dt*_dp[i]); sum+=s.p[i]; s.rho[i]=Math.max(P.rhoMin,s.rho[i]+dt*_drho[i]); }
   for(i=0;i<n;i++) s.p[i]/=sum;
   s.F=Math.max(0,s.F+dt*dF);
-  s.z=s.z+dt*dz;
+  // integrate with anti-windup: a generous clamp (well outside the normal
+  // operating range, ~|z|<3) so a pathological transient can't wind the
+  // integral up unbounded; it never engages in ordinary use.
+  s.z=Math.max(-P.zClamp, Math.min(P.zClamp, s.z+dt*dz));
   s.m[0]=mx; s.m[1]=my; s.pibar=pibar; s.theta=theta; s.Fset=Fset;
   return s;
 }
@@ -306,9 +308,12 @@ function fitCanvas(cv){
   var ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); return ctx;
 }
 function clear(ctx,w,h){ ctx.fillStyle="#0a0f15"; ctx.fillRect(0,0,w,h); }
+// shared y-axis ceiling for the fill (gauge and trace), so both read at one scale
+function fillAxisMax(P){ return Math.max(2.6, P.Fstar+1.8); }
 
 function drawChannel(cv, s, u, y, layer){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  if(w<40||h<40) return;   // hidden / collapsed panel: nothing to draw
   // Constant frame: the view always shows model radius up to VIEW (the world can
   // swing out past the unit circle after a context shift), so every state is drawn
   // at the same scale and is directly comparable -- never reframed for the extremes.
@@ -369,6 +374,7 @@ function drawChannel(cv, s, u, y, layer){
 
 function drawDivision(cv, s, layer){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  if(w<40||h<40) return;
   var n=s.p.length, pad=10, top=24, bw=(w-2*pad)/n;
   var win=0; for(var i=1;i<n;i++) if(s.p[i]>s.p[win]) win=i;
   // y = share of the channel; bottom rows reserved for the option numbers + hint
@@ -398,8 +404,9 @@ function drawDivision(cv, s, layer){
 
 function drawFill(cv, s, P){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  if(w<40||h<40) return;
   var pad=24, top=24, bot=h-16, gx=w/2;
-  var Fmax=Math.max(2.6, P.Fstar+1.8);
+  var Fmax=fillAxisMax(P);
   function Y(F){ return bot-(bot-top)*(Math.min(F,Fmax)/Fmax); }
   // euthymic band
   ctx.fillStyle="rgba(55,210,122,.10)";
@@ -409,11 +416,11 @@ function drawFill(cv, s, P){
   ctx.fillStyle="rgba(55,210,122,.6)"; ctx.font="9px monospace"; ctx.textAlign="left";
   ctx.fillText("target", gx+34, Y(P.Fstar)+3);
   ctx.fillStyle="rgba(55,210,122,.45)"; ctx.fillText("healthy band", gx+34, Y(P.Fstar-P.band)+3);
-  // feast/famine setpoint (where the environment has moved the target)
-  if(P.env && Math.abs(P.env)>0.02){
-    var Fset=P.Fstar*(1+P.envGain*P.env);
+  // feast/famine setpoint (the env-shifted target the homeostat now defends;
+  // computed in step() and stored on the state, so this stays the single source)
+  if(Math.abs(P.env)>0.02){
     ctx.strokeStyle="#ffb000"; ctx.setLineDash([2,3]);
-    ctx.beginPath(); ctx.moveTo(gx-30,Y(Fset)); ctx.lineTo(gx+30,Y(Fset)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(gx-30,Y(s.Fset)); ctx.lineTo(gx+30,Y(s.Fset)); ctx.stroke(); ctx.setLineDash([]);
   }
   // bar
   var flooded=s.F>P.Fstar+P.band, starved=s.F<P.Fstar-P.band;
@@ -430,6 +437,7 @@ function drawFill(cv, s, P){
 // scrolling traces
 function drawTraces(cv, buf, P, layer){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  if(w<40||h<40) return;
   var pad=6, top=24, H=h-top-6, x0=pad, gutter=122, x1=w-pad-gutter;
   // grid
   ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
@@ -450,7 +458,7 @@ function drawTraces(cv, buf, P, layer){
   var show={F:true,H:true,err:true};
   if(layer==="2"){ show={F:false,H:true,err:false}; }
   else if(layer==="3"){ show={F:false,H:false,err:true}; }
-  var Fmax=Math.max(2.6,P.Fstar+1.8);
+  var Fmax=fillAxisMax(P);
   // each line, then a label parked at the line's right-hand end, in its colour
   var labels=[];
   if(show.F)   labels.push({end:plot(buf.F, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
@@ -577,7 +585,7 @@ function updateDiag(){
   var err=rollMean(buf.err);
   var ampF=rollAmp(ewsF);
   var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
-  var d={H:H, F:s.F, err:err, ampF:ampF, vH:vH};
+  var d={H:H, F:s.F, err:err, ampF:ampF};
   var reg=classify(d,P);
   var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
   var rows=[
