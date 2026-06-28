@@ -318,13 +318,15 @@ function drawChannel(cv, s, u, y, layer){
   ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
   // winner
   var win=0; for(var i=1;i<u.length;i++) if(s.p[i]>s.p[win]) win=i;
-  // u_i points, sized by p
+  // the options (coalitions) sit at fixed clock positions; dot size = its share.
+  // grey for all; the leader gets a brighter fill + a light ring. Amber is kept
+  // for m and cyan for y only, so the three kinds of mark never collide.
   for(i=0;i<u.length;i++){
-    var r=3+18*s.p[i];
+    var r=3+20*s.p[i];
     ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r,0,2*Math.PI);
-    ctx.fillStyle = i===win ? "rgba(255,176,0,.9)" : "rgba(120,150,170,.5)";
+    ctx.fillStyle = i===win ? "rgba(170,194,212,.95)" : "rgba(120,150,170,.45)";
     ctx.fill();
-    if(i===win){ ctx.strokeStyle="rgba(255,176,0,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r+5,0,2*Math.PI); ctx.stroke(); }
+    if(i===win){ ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r+4,0,2*Math.PI); ctx.stroke(); }
   }
   // yhat (discounted evidence) shown faint in fit layer
   if(layer==="3"||layer==="all"){
@@ -342,8 +344,9 @@ function drawChannel(cv, s, u, y, layer){
   ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(X(s.m),Y(s.m),5,0,2*Math.PI); ctx.fill();
   // legend (plain words + a colour glyph for each mark, so the picture reads cold)
   ctx.font="10px monospace"; ctx.textBaseline="middle";
-  function key(yy, draw, txt){ draw(yy); ctx.fillStyle="#8da2b2"; ctx.textAlign="left"; ctx.fillText(txt, 26, yy); }
-  key(h-40, function(yy){ ctx.fillStyle="rgba(120,150,170,.7)"; ctx.beginPath(); ctx.arc(16,yy,4,0,2*Math.PI); ctx.fill(); }, "options (coalitions)");
+  function key(yy, draw, txt){ draw(yy); ctx.fillStyle="#8da2b2"; ctx.textAlign="left"; ctx.fillText(txt, 30, yy); }
+  key(h-54, function(yy){ ctx.fillStyle="rgba(120,150,170,.6)"; ctx.beginPath(); ctx.arc(13,yy,2.5,0,2*Math.PI); ctx.fill(); ctx.beginPath(); ctx.arc(20,yy,4.5,0,2*Math.PI); ctx.fill(); }, "options (size = its share)");
+  key(h-40, function(yy){ ctx.fillStyle="rgba(170,194,212,.95)"; ctx.beginPath(); ctx.arc(16,yy,5,0,2*Math.PI); ctx.fill(); ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(16,yy,7,0,2*Math.PI); ctx.stroke(); }, "leader (the winner)");
   key(h-26, function(yy){ ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.fill(); }, "m = the system's guess");
   key(h-12, function(yy){ ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.stroke(); }, "y = the world");
   // gap between guess and world = tracking error
