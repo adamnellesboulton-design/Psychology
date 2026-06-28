@@ -352,20 +352,22 @@ function drawChannel(cv, lv, target, isTop){
   ctx.strokeStyle="#0c161d"; ctx.beginPath(); ctx.arc(cx,cy,R*VIEW,0,2*Math.PI); ctx.stroke();
   // winner
   var win=0; for(var i=1;i<u.length;i++) if(s.p[i]>s.p[win]) win=i;
-  // the options (coalitions) sit at fixed clock positions; dot size = its share.
-  // grey for all; the leader gets a brighter fill + a light ring. Amber is kept
-  // for m and cyan for y only, so the three kinds of mark never collide.
+  // Each option has a fixed DIRECTION (its angle round the dial) but its dot sits
+  // at a RADIUS equal to its share: center = ~no share, rim = dominant. So the
+  // dots spread by how much they are winning, not all pinned at the edge. Faint
+  // spokes + numbered rim ticks keep the directions readable when a dot is near
+  // the middle.
+  ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
+  for(i=0;i<u.length;i++){ ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+u[i][0]*R, cy-u[i][1]*R); ctx.stroke(); }
+  ctx.font="9px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(i=0;i<u.length;i++){ ctx.fillStyle="rgba(120,150,170,.5)"; ctx.fillText(String(i+1), cx+u[i][0]*(R+10), cy-u[i][1]*(R+10)); }
   for(i=0;i<u.length;i++){
-    var r=3+20*s.p[i];
-    ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r,0,2*Math.PI);
-    ctx.fillStyle = i===win ? "rgba(170,194,212,.95)" : "rgba(120,150,170,.45)";
+    var rad=s.p[i]*R, dxp=cx+u[i][0]*rad, dyp=cy-u[i][1]*rad, r=3+7*s.p[i];
+    ctx.beginPath(); ctx.arc(dxp,dyp,r,0,2*Math.PI);
+    ctx.fillStyle = i===win ? "rgba(170,194,212,.95)" : "rgba(120,150,170,.55)";
     ctx.fill();
-    if(i===win){ ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r+4,0,2*Math.PI); ctx.stroke(); }
-    if(i===sel){ ctx.strokeStyle="#d6e6f2"; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r+8,0,2*Math.PI); ctx.stroke(); ctx.setLineDash([]); }
-    // option number, just inside the rim like a clock face (matches the bar chart)
-    ctx.fillStyle = i===win ? "#cfe0ec" : "rgba(120,150,170,.6)";
-    ctx.font="9px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(String(i+1), cx+u[i][0]*R*0.82, cy-u[i][1]*R*0.82);
+    if(i===win){ ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(dxp,dyp,r+4,0,2*Math.PI); ctx.stroke(); }
+    if(i===sel){ ctx.strokeStyle="#d6e6f2"; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.arc(dxp,dyp,r+8,0,2*Math.PI); ctx.stroke(); ctx.setLineDash([]); }
   }
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
   // the target: the world (top level) or the level above's pick (cyan ring)
@@ -379,7 +381,7 @@ function drawChannel(cv, lv, target, isTop){
   // legend (plain words + a colour glyph for each mark, so the picture reads cold)
   ctx.font="10px monospace"; ctx.textBaseline="middle";
   function key(yy, draw, txt){ draw(yy); ctx.fillStyle="#8da2b2"; ctx.textAlign="left"; ctx.fillText(txt, 30, yy); }
-  key(h-54, function(yy){ ctx.fillStyle="rgba(120,150,170,.6)"; ctx.beginPath(); ctx.arc(13,yy,2.5,0,2*Math.PI); ctx.fill(); ctx.beginPath(); ctx.arc(20,yy,4.5,0,2*Math.PI); ctx.fill(); }, "options (size = its share)");
+  key(h-54, function(yy){ ctx.fillStyle="rgba(120,150,170,.6)"; ctx.beginPath(); ctx.arc(16,yy,3.5,0,2*Math.PI); ctx.fill(); }, "options (distance out = share)");
   key(h-40, function(yy){ ctx.fillStyle="rgba(170,194,212,.95)"; ctx.beginPath(); ctx.arc(16,yy,5,0,2*Math.PI); ctx.fill(); ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(16,yy,7,0,2*Math.PI); ctx.stroke(); }, "leader (the winner)");
   key(h-26, function(yy){ ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.fill(); }, "m = this level's pick");
   key(h-12, function(yy){ ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.stroke(); }, isTop?"y = the world":"target = level above");
@@ -389,10 +391,10 @@ function drawChannel(cv, lv, target, isTop){
     ctx.fillStyle="rgba(54,182,200,.7)"; ctx.font="9px monospace"; ctx.textAlign="center";
     ctx.fillText("gap = error", mxp, myp-6);
   }
-  // how to read the constellation: angle = which option, distance from the
-  // center = how committed (centre = undecided/spread, rim = all-in on one).
+  // how to read the constellation: angle = which option; distance from center =
+  // that option's share (center = ~zero, rim = dominant).
   ctx.fillStyle="#46586a"; ctx.font="9px monospace"; ctx.textAlign="center";
-  ctx.fillText("angle = which option    center -> rim = undecided -> committed", w/2, h-6);
+  ctx.fillText("angle = which option    distance out = its share (center 0, rim dominant)", w/2, h-6);
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
 }
 
@@ -685,7 +687,7 @@ el("ch").onclick=function(ev){
   if(sel>=0){
     // clock is open: click a dot to inspect another bid, empty space to close
     var cx=w/2, cy=h/2, VIEW=1.6, R=(Math.min(w,h)/2-16)/VIEW, lv=levels[viewLevel];
-    for(i=0;i<lv.u.length;i++){ dx=mx-(cx+lv.u[i][0]*R); dy=my-(cy-lv.u[i][1]*R); d=dx*dx+dy*dy; if(d<bd){bd=d;best=i;} }
+    for(i=0;i<lv.u.length;i++){ var rd=lv.p[i]*R; dx=mx-(cx+lv.u[i][0]*rd); dy=my-(cy-lv.u[i][1]*rd); d=dx*dx+dy*dy; if(d<bd){bd=d;best=i;} }
     sel = (bd>900) ? -1 : best;
   } else {
     // bid map is open: click a point to drill to its level + open its clock
