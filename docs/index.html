@@ -421,17 +421,34 @@ function drawBidMap(cv){
   ctx.fillText("win share  (who is winning)", (x0+x1)/2, h-6);
   ctx.save(); ctx.translate(14,(y0+y1)/2); ctx.rotate(-Math.PI/2);
   ctx.fillText("epistemic rating rho  (fit to the real)", 0, 0); ctx.restore();
-  // every bid: viewed level bright amber, other levels faint grey. Bigger dot =
-  // bigger win (redundant with x, but makes the leaders pop).
+  // stable per-bid jitter so coincident bids separate instead of hiding (does
+  // not flicker: a fixed offset per (level, bid))
+  function jit(k,i,a){ var hh=Math.sin(k*12.9898+i*78.233+a*37.719)*43758.5453; return ((hh-Math.floor(hh))-0.5)*7; }
+  var n=P.n;
+  // density trail: faint accumulation of where every bid has been recently. The
+  // cloud thickens where the environment's feedback parks the bids; it smears
+  // when bids churn (e.g. ADHD).
+  for(var f=0;f<bidHist.length;f++){
+    var snap=bidHist[f], rec=(f+1)/bidHist.length;     // newer = brighter
+    for(var k=0;k<levels.length;k++){
+      var on0=(k===viewLevel);
+      for(var i=0;i<n;i++){
+        var bb=(k*n+i)*2, tx=PX(snap[bb])+jit(k,i,0), ty=PY(snap[bb+1])+jit(k,i,1);
+        ctx.fillStyle = on0 ? "rgba(255,176,0,"+(0.05*rec).toFixed(3)+")" : "rgba(120,150,170,"+(0.03*rec).toFixed(3)+")";
+        ctx.beginPath(); ctx.arc(tx,ty,1.6,0,2*Math.PI); ctx.fill();
+      }
+    }
+  }
+  // current bids on top, bright
   _bidGeo.length=0;
-  for(var k=0;k<levels.length;k++){
-    var lv=levels[k], on=(k===viewLevel);
-    for(var i=0;i<lv.p.length;i++){
-      var px=PX(lv.p[i]), py=PY(lv.rho[i]);
-      _bidGeo.push({k:k,i:i,x:px,y:py});
-      ctx.fillStyle = on ? "rgba(255,176,0,.9)" : "rgba(120,150,170,.32)";
-      ctx.beginPath(); ctx.arc(px,py, (on?3:2)+3*lv.p[i], 0, 2*Math.PI); ctx.fill();
-      if(on && i===sel){ ctx.strokeStyle="#d6e6f2"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(px,py,8,0,2*Math.PI); ctx.stroke(); }
+  for(var k2=0;k2<levels.length;k2++){
+    var lv=levels[k2], on=(k2===viewLevel);
+    for(var i2=0;i2<n;i2++){
+      var px=PX(lv.p[i2])+jit(k2,i2,0), py=PY(lv.rho[i2])+jit(k2,i2,1);
+      _bidGeo.push({k:k2,i:i2,x:px,y:py});
+      ctx.fillStyle = on ? "rgba(255,176,0,.9)" : "rgba(120,150,170,.4)";
+      ctx.beginPath(); ctx.arc(px,py, (on?3:2)+3*lv.p[i2], 0, 2*Math.PI); ctx.fill();
+      if(on && i2===sel){ ctx.strokeStyle="#d6e6f2"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(px,py,8,0,2*Math.PI); ctx.stroke(); }
     }
   }
   // compact legend inside the plot, top-right (clear of the panel caption)
@@ -596,6 +613,7 @@ var buf={F:[], H:[], err:[]};       // H[k], err[k] are arrays per level
 for(var _b=0;_b<P.levels;_b++){ buf.H.push([]); buf.err.push([]); }
 var ewsH=[], ewsF=[];
 var pHist=[], PHIST=120;            // recent share vectors of the VIEWED level (for bar whiskers)
+var bidHist=[], BIDHIST=48;         // recent (p,rho) of every bid in the stack (bid-map density trail)
 
 function el(id){ return document.getElementById(id); }
 
@@ -691,6 +709,11 @@ function advance(){
   buf.F.push(fill.F); if(buf.F.length>BUFLEN) buf.F.shift();
   // recent share vectors of the viewed level, for the per-bar range whiskers
   pHist.push(Array.prototype.slice.call(levels[viewLevel].p)); if(pHist.length>PHIST) pHist.shift();
+  // recent (p,rho) of every bid across the stack, for the bid-map density trail:
+  // the cloud builds up where the environment's feedback keeps the bids
+  var snap=new Float64Array(levels.length*P.n*2);
+  for(var lk=0;lk<levels.length;lk++){ var lp=levels[lk].p, lr=levels[lk].rho; for(var li=0;li<P.n;li++){ var bx=(lk*P.n+li)*2; snap[bx]=lp[li]; snap[bx+1]=lr[li]; } }
+  bidHist.push(snap); if(bidHist.length>BIDHIST) bidHist.shift();
   // early-warning + classifier run on the collated top level
   ewsH.push(buf.H[0][buf.H[0].length-1]); ewsF.push(fill.F);
   if(ewsH.length>P.ewsWin){ ewsH.shift(); ewsF.shift(); }
