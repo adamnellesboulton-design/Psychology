@@ -606,7 +606,16 @@ function loop(){
   render();
   requestAnimationFrame(loop);
 }
+function warmup(){
+  // settle the model to its steady state, then pre-fill the scrolling buffers
+  // with settled samples. Otherwise the cold start (uniform division, fill off
+  // its setpoint) scrolls across the left of the trace and reads as an averaging
+  // artifact rather than real dynamics.
+  for(var i=0;i<1200;i++){ t+=P.dt; step(s,P,u,evidence(t),P.dt); }
+  for(i=0;i<BUFLEN;i++) advance();
+}
 setLayer("1");
+warmup();
 requestAnimationFrame(loop);
 </script>
 </body>
