@@ -127,7 +127,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
         </div>
         <div id="stageRight" style="display:grid; grid-template-rows:1fr 1fr; gap:1px; background:var(--line); min-width:0; min-height:0">
           <div class="panel" data-layers="1 2 all">
-            <div class="cap">division p <span class="sub">who is winning, how concentrated</span></div>
+            <div class="cap">division p <span class="sub">who is winning, how dominant</span></div>
             <canvas id="div"></canvas>
           </div>
           <div class="panel" data-layers="1 3 all">
@@ -138,7 +138,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
       </div>
       <div id="stageBot">
         <div class="panel" data-layers="1 2 3 all">
-          <div class="cap" id="capTr">traces <span class="sub" id="capTrSub">F, concentration H, tracking error</span></div>
+          <div class="cap" id="capTr">traces <span class="sub" id="capTrSub">F, dominance H, tracking error</span></div>
           <canvas id="tr"></canvas>
         </div>
         <div class="panel" data-layers="1 2 3 all" style="padding:24px 12px 12px">
@@ -340,10 +340,19 @@ function drawChannel(cv, s, u, y, layer){
   ctx.beginPath(); ctx.moveTo(X(s.m),Y(s.m)); ctx.lineTo(X(y),Y(y)); ctx.stroke();
   // shared state m: filled accent
   ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(X(s.m),Y(s.m),5,0,2*Math.PI); ctx.fill();
-  // legend
-  ctx.font="10px monospace"; ctx.textBaseline="alphabetic";
-  ctx.fillStyle="#ffb000"; ctx.fillText("m shared state", 10, h-22);
-  ctx.fillStyle="#36b6c8"; ctx.fillText("y world", 10, h-10);
+  // legend (plain words + a colour glyph for each mark, so the picture reads cold)
+  ctx.font="10px monospace"; ctx.textBaseline="middle";
+  function key(yy, draw, txt){ draw(yy); ctx.fillStyle="#8da2b2"; ctx.textAlign="left"; ctx.fillText(txt, 26, yy); }
+  key(h-40, function(yy){ ctx.fillStyle="rgba(120,150,170,.7)"; ctx.beginPath(); ctx.arc(16,yy,4,0,2*Math.PI); ctx.fill(); }, "options (coalitions)");
+  key(h-26, function(yy){ ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.fill(); }, "m = the system's guess");
+  key(h-12, function(yy){ ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.stroke(); }, "y = the world");
+  // gap between guess and world = tracking error
+  if(dist(s.m,y)>0.18){
+    var mxp=(X(s.m)+X(y))/2, myp=(Y(s.m)+Y(y))/2;
+    ctx.fillStyle="rgba(54,182,200,.7)"; ctx.font="9px monospace"; ctx.textAlign="center";
+    ctx.fillText("gap = error", mxp, myp-6);
+  }
+  ctx.textAlign="left"; ctx.textBaseline="alphabetic";
 }
 
 function drawDivision(cv, s, layer){
@@ -354,16 +363,20 @@ function drawDivision(cv, s, layer){
   var base=top, H=h-top-14;
   ctx.strokeStyle="#16222c"; ctx.setLineDash([3,3]);
   var y1n=base+H*(1-1/n); ctx.beginPath(); ctx.moveTo(pad,y1n); ctx.lineTo(w-pad,y1n); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.fillText("1/n", w-pad-20, y1n-2);
+  ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.textAlign="right"; ctx.fillText("even split (1/n)", w-pad-2, y1n-3); ctx.textAlign="left";
   for(i=0;i<n;i++){
     var bh=H*s.p[i], x=pad+i*bw+1;
     ctx.fillStyle = i===win ? "#ffb000" : "#2f4250";
     ctx.fillRect(x, base+H-bh, bw-2, bh);
   }
-  if(layer==="2"||layer==="all"){
-    ctx.fillStyle="#9fb2c0"; ctx.font="10px monospace";
-    ctx.fillText("each bar = a coalition's mass; collapse onto one = condensation", 10, h-4);
-  }
+  // mark the leader so the bar chart reads at a glance
+  ctx.fillStyle="#ffb000"; ctx.font="9px monospace"; ctx.textAlign="center";
+  ctx.fillText("winner", pad+win*bw+bw/2, base+H-H*s.p[win]-5);
+  ctx.textAlign="left";
+  var hint = (layer==="2"||layer==="all")
+    ? "each bar = a coalition's mass; collapse onto one = condensation"
+    : "each bar = one coalition; tall bar = it is winning";
+  ctx.fillStyle="#7d8f9c"; ctx.font="10px monospace"; ctx.fillText(hint, 10, h-4);
 }
 
 function drawFill(cv, s, P){
@@ -376,6 +389,9 @@ function drawFill(cv, s, P){
   ctx.fillRect(gx-26, Y(P.Fstar+P.band), 52, Y(P.Fstar-P.band)-Y(P.Fstar+P.band));
   ctx.strokeStyle="rgba(55,210,122,.4)"; ctx.setLineDash([4,3]);
   ctx.beginPath(); ctx.moveTo(gx-30,Y(P.Fstar)); ctx.lineTo(gx+30,Y(P.Fstar)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle="rgba(55,210,122,.6)"; ctx.font="9px monospace"; ctx.textAlign="left";
+  ctx.fillText("target", gx+34, Y(P.Fstar)+3);
+  ctx.fillStyle="rgba(55,210,122,.45)"; ctx.fillText("healthy band", gx+34, Y(P.Fstar-P.band)+3);
   // feast/famine setpoint (where the environment has moved the target)
   if(P.env && Math.abs(P.env)>0.02){
     var Fset=P.Fstar*(1+P.envGain*P.env);
@@ -397,34 +413,46 @@ function drawFill(cv, s, P){
 // scrolling traces
 function drawTraces(cv, buf, P, layer){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
-  var pad=6, top=24, H=h-top-6, x0=pad, x1=w-pad;
+  var pad=6, top=24, H=h-top-6, x0=pad, gutter=122, x1=w-pad-gutter;
   // grid
   ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
   for(var g=0;g<=4;g++){ var gy=top+H*g/4; ctx.beginPath(); ctx.moveTo(x0,gy); ctx.lineTo(x1,gy); ctx.stroke(); }
   var N=buf.F.length; if(N<2) return;
   function plot(arr, lo, hi, col){
     ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
+    var lastY=top;
     for(var i=0;i<N;i++){
       var v=(arr[i]-lo)/(hi-lo); v=v<0?0:(v>1?1:v);
       var x=x0+(x1-x0)*i/(N-1), y=top+H*(1-v);
       if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      lastY=y;
     }
     ctx.stroke();
+    return lastY;
   }
   var show={F:true,H:true,err:true};
   if(layer==="2"){ show={F:false,H:true,err:false}; }
   else if(layer==="3"){ show={F:false,H:false,err:true}; }
   var Fmax=Math.max(2.6,P.Fstar+1.8);
-  if(show.F)   plot(buf.F, 0, Fmax, "#37d27a");
-  if(show.H)   plot(buf.H, 0, 1, "#ffb000");
-  if(show.err) plot(buf.err, 0, 1.6, "#36b6c8");
-  // legend (right-aligned, clear of the panel caption at top-left)
-  ctx.font="10px monospace"; ctx.textAlign="right";
-  var rx=x1-4;
-  if(show.err){ ctx.fillStyle="#36b6c8"; ctx.fillText("err", rx, top-9); rx-=30; }
-  if(show.H){ ctx.fillStyle="#ffb000"; ctx.fillText("H", rx, top-9); rx-=18; }
-  if(show.F){ ctx.fillStyle="#37d27a"; ctx.fillText("F", rx, top-9); }
-  ctx.textAlign="left";
+  // each line, then a label parked at the line's right-hand end, in its colour
+  var labels=[];
+  if(show.F)   labels.push({end:plot(buf.F, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
+  if(show.H)   labels.push({end:plot(buf.H, 0, 1, "#ffb000"),     col:"#ffb000", txt:"dominance H"});
+  if(show.err) labels.push({end:plot(buf.err, 0, 1.6, "#36b6c8"), col:"#36b6c8", txt:"tracking error"});
+  // label y starts at the line end, then de-overlap vertically (keeps `end` for the connector)
+  labels.sort(function(a,b){return a.end-b.end;});
+  for(var i=0;i<labels.length;i++){ labels[i].ly = i===0 ? labels[i].end : Math.max(labels[i].end, labels[i-1].ly+13); }
+  if(labels.length){ var over=labels[labels.length-1].ly-(top+H-2); if(over>0){ for(i=0;i<labels.length;i++) labels[i].ly-=over; } }
+  ctx.font="10px monospace"; ctx.textAlign="left"; ctx.textBaseline="middle";
+  var lx=x1+10;
+  for(i=0;i<labels.length;i++){
+    var L=labels[i];
+    ctx.strokeStyle=L.col; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x1, L.end); ctx.lineTo(lx-4, L.ly); ctx.stroke();
+    ctx.fillStyle=L.col; ctx.fillRect(lx, L.ly-1.5, 7, 3);
+    ctx.fillText(L.txt, lx+11, L.ly);
+  }
+  ctx.textBaseline="alphabetic";
 }
 
 // ===========================================================================
@@ -491,13 +519,13 @@ function setLayer(L){
   });
   // captions / notes per layer
   var notes={
-    "1":"Layer 1, the contest. Coalitions bid for the one channel; the division p says who wins and how concentrated, the fill F how much competes. Drive a control out of range and a disorder falls out.",
-    "2":"Layer 2, the coalition layer. Read the division as mass: high concentration H is condensation onto one coalition (the monopoly). Raising the integrating gain past threshold collapses the field onto a single winner.",
+    "1":"Layer 1, the contest. Coalitions bid for the one channel; the division p says who wins and how dominant, the fill F how much competes. Drive a control out of range and a disorder falls out.",
+    "2":"Layer 2, the coalition layer. Read the division as mass: high dominance H is condensation onto one coalition (the monopoly). Raising the integrating gain past threshold collapses the field onto a single winner.",
     "3":"Layer 3, what fit answers to. m is the shared state, y the world, yhat the discounted evidence the system actually scores against. Tracking error is fit. A short discount horizon chases y and loses the thread.",
-    "all":"All layers at once: the contest (division and fill), the coalition reading (concentration), and fit (m vs y vs yhat) together."
+    "all":"All layers at once: the contest (division and fill), the coalition reading (dominance), and fit (m vs y vs yhat) together."
   };
   el("layerNote").textContent=notes[L];
-  el("capTrSub").textContent = L==="2"?"concentration H":(L==="3"?"tracking error":"F, concentration H, tracking error");
+  el("capTrSub").textContent = L==="2"?"dominance H":(L==="3"?"tracking error":"F, dominance H, tracking error");
   // force canvases to re-fit next frame
   resizeAll();
 }
@@ -536,7 +564,7 @@ function updateDiag(){
   var reg=classify(d,P);
   var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
   var rows=[
-    ["conc H", H.toFixed(3)+" / "+(1/P.n).toFixed(3)],
+    ["dominance H", H.toFixed(3)+" / "+(1/P.n).toFixed(3)],
     ["fill F", s.F.toFixed(3)+" (F*"+P.Fstar.toFixed(1)+")"],
     ["fill amp", ampF.toFixed(3), ampF>P.amp_osc],
     ["track err", err.toFixed(3), err>P.errLost],

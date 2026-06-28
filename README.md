@@ -18,9 +18,10 @@ Everything (model, rendering, UI) is one self-contained HTML file.
 One **channel** carries a moving piece of evidence about the world, `y`. A set
 of competing coalitions bid to explain it. Two things evolve:
 
-- **Division `p`** — who is winning the channel and how concentrated the field
+- **Division `p`** — who is winning the channel and how dominant one coalition
   is (replicator dynamics on a probability simplex). The bar chart shows the
-  coalitions; concentration `H` (Herfindahl) is the order parameter.
+  coalitions; dominance `H` (the Herfindahl concentration index) is the order
+  parameter.
 - **Fill `F`** — how hard the system is competing overall, held near a target
   by a PI homeostat. The vertical gauge shows it against its euthymic band.
 
