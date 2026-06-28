@@ -80,15 +80,22 @@ environmental wobble), so the system is never perfectly quiet.
 (manic), toward famine is low (depressed). The bipolar limit cycle is exactly
 this level swinging between the two poles.
 
-## Layers
+## Layers (the nested stack)
 
-The layer picker reframes the same running model at four levels:
+The model is not one contest but a **stack of nested allocator contests**, one
+per scale: level _n_ at the top, then _n−1_, down to **cellular** at the
+bottom. Each level is a live contest with its own coalitions, division and
+consensus. Coupling is **top-down**: the top level tracks the external world,
+and every level below chases its parent's pick (`m`) as its own target — a
+subordinate contest realizing the level above, one scale finer. The four
+controls act at **every** scale, so a malfunction or miscalibration cascades
+down the whole stack (drive `G` high and every level collapses, not just the
+top).
 
-- **1 — contest:** the literal channel. Coalitions bid; `p` says who wins, `F`
-  how hard.
-- **2 — coalition:** read the division as mass condensing onto a coalition.
-- **3 — fit:** what the winner is answering to — the tracking of the world.
-- **last (all):** everything merged.
+The top level is the **collated headline**: the regime label is read there. The
+layer picker (level n / n−1 / n−2 / cellular) drills the panels into any level
+so you can watch that scale's own contest and how well it tracks the one above.
+The fill `F` (organism mood) is shared across the stack.
 
 ## Notes
 

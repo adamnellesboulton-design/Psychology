@@ -109,10 +109,10 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
     <div class="layerline">
       <span>layer</span>
       <div class="seg" id="layers">
-        <button data-layer="1" class="active">1 contest</button>
-        <button data-layer="2">2 coalition</button>
-        <button data-layer="3">3 fit</button>
-        <button data-layer="all">last (all)</button>
+        <button data-layer="0" class="active">level n</button>
+        <button data-layer="1">n-1</button>
+        <button data-layer="2">n-2</button>
+        <button data-layer="3">cellular</button>
       </div>
     </div>
   </header>
@@ -188,7 +188,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 // always-on noise. Everything else is the spec's reference step.)
 // ===========================================================================
 var CONFIG = {
-  n:8, dt:0.01, substeps:8,
+  n:8, dt:0.01, substeps:8, levels:4,   // nested stack depth: level n .. cellular
   eta:2.4, lambda:2.0, c:1.4,
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
   delta:0.6, phi:1.0,
@@ -221,62 +221,79 @@ function makeU(n, seed){
   var u=[]; for(var i=0;i<n;i++){ var a=2*Math.PI*i/n + seed; u.push([Math.cos(a),Math.sin(a)]); } return u;
 }
 
-function initState(P){
+// The model is a STACK of nested allocator contests (level n at the top, then
+// n-1, ... down to cellular). Each level is a live replicator contest with its
+// own coalitions u, division p, precision rho and consensus m. Coupling is
+// top-down: the top level tracks the external world; every lower level chases
+// its parent's pick (parent.m) as its own target. The four controls act at
+// every scale, so a malfunction or miscalibration cascades down the stack. The
+// top level is the collated headline. There is one fill homeostat (organism
+// mood / competition intensity), driven by the top level.
+function initLevel(P, seed){
   var n=P.n, p=new Float64Array(n), rho=new Float64Array(n);
   for(var i=0;i<n;i++){ p[i]=1/n; rho[i]=P.rho0; }
-  return {p:p, F:P.Fstar, z:0, rho:rho, yhat:[0,0], m:[0,0], pibar:0, theta:0};
+  return {p:p, rho:rho, yhat:[0,0], m:[0,0], pibar:0, u:makeU(n, seed)};
 }
+function initFill(P){ return {F:P.Fstar, z:0, Fset:P.Fstar, theta:0}; }
 
 // preallocated scratch (no per-frame alloc in the hot path)
 var _pi=null, _dp=null, _drho=null;
 function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _dp=new Float64Array(n); _drho=new Float64Array(n);} }
 
-function step(s, P, u, y, dt){
-  var n=P.n; ensureScratch(n);
-  // discounted evidence (the horizon set by the discount rate). The system sees a
-  // noisy observation of the world; a short horizon chases that noise (ADHD).
+// one division contest at one level, tracking target y (the world for the top
+// level, the parent's consensus for the rest)
+function stepDivision(lv, P, y, dt){
+  var n=P.n, u=lv.u; ensureScratch(n);
+  // discounted evidence (horizon set by the discount rate); a short horizon
+  // chases the noisy observation (ADHD).
   var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
-  s.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-s.yhat[0]);
-  s.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-s.yhat[1]);
-  // shared state m (precision-weighted consensus), plus a per-tick epistemic
-  // wobble: the system's estimate of where things stand is never perfectly
-  // certain, so it jitters by sigmaM each tick (epistemological uncertainty).
+  lv.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-lv.yhat[0]);
+  lv.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-lv.yhat[1]);
+  // precision-weighted consensus m, plus a per-tick epistemic wobble (sigmaM):
+  // the estimate is never perfectly certain (epistemological uncertainty).
   var mx=0,my=0,w=0;
-  for(var i=0;i<n;i++){ var wi=s.p[i]*s.rho[i]; mx+=wi*u[i][0]; my+=wi*u[i][1]; w+=wi; }
+  for(var i=0;i<n;i++){ var wi=lv.p[i]*lv.rho[i]; mx+=wi*u[i][0]; my+=wi*u[i][1]; w+=wi; }
   mx/=w; my/=w;
   mx+=P.sigmaM*randn(); my+=P.sigmaM*randn();
-  // payoffs
   var pibar=0;
   for(i=0;i<n;i++){
     var ddm=(u[i][0]-mx)*(u[i][0]-mx)+(u[i][1]-my)*(u[i][1]-my);
-    var ddy=(u[i][0]-s.yhat[0])*(u[i][0]-s.yhat[0])+(u[i][1]-s.yhat[1])*(u[i][1]-s.yhat[1]);
-    _pi[i]=-0.5*P.G*s.rho[i]*ddm - 0.5*P.lambda*ddy - P.c*s.p[i] + P.sigmaPi*randn();
-    pibar+=s.p[i]*_pi[i];
+    var ddy=(u[i][0]-lv.yhat[0])*(u[i][0]-lv.yhat[0])+(u[i][1]-lv.yhat[1])*(u[i][1]-lv.yhat[1]);
+    _pi[i]=-0.5*P.G*lv.rho[i]*ddm - 0.5*P.lambda*ddy - P.c*lv.p[i] + P.sigmaPi*randn();
+    pibar+=lv.p[i]*_pi[i];
   }
-  // replicator (division) + precision outer loop
   for(i=0;i<n;i++){
-    _dp[i]=P.eta*s.p[i]*(_pi[i]-pibar);
-    var ddy2=(u[i][0]-s.yhat[0])*(u[i][0]-s.yhat[0])+(u[i][1]-s.yhat[1])*(u[i][1]-s.yhat[1]);
+    _dp[i]=P.eta*lv.p[i]*(_pi[i]-pibar);
+    var ddy2=(u[i][0]-lv.yhat[0])*(u[i][0]-lv.yhat[0])+(u[i][1]-lv.yhat[1])*(u[i][1]-lv.yhat[1]);
     var rhoT=P.rho0*Math.exp(-ddy2/(P.s*P.s));
-    _drho[i]=P.phi*(rhoT-s.rho[i]);
+    _drho[i]=P.phi*(rhoT-lv.rho[i]);
   }
-  // fill (homeostat PI). Feast/famine shifts the *setpoint* the homeostat defends:
-  // feast(+) = reproductive surplus, the fill grows to a richer target; famine(-) starves it.
-  var Fset=P.Fstar*(1+P.envGain*P.env);
-  var theta=P.theta0+P.kP*(s.F-Fset)+P.kI*s.z;
-  var dF=s.F*(P.a*pibar - theta + P.sigmaF*randn());  // sigmaF = always-on randomness
-  var dz=s.F-Fset;
-  // integrate
   var sum=0;
-  for(i=0;i<n;i++){ s.p[i]=Math.max(P.eps,s.p[i]+dt*_dp[i]); sum+=s.p[i]; s.rho[i]=Math.max(P.rhoMin,s.rho[i]+dt*_drho[i]); }
-  for(i=0;i<n;i++) s.p[i]/=sum;
-  s.F=Math.max(0,s.F+dt*dF);
-  // integrate with anti-windup: a generous clamp (well outside the normal
-  // operating range, ~|z|<3) so a pathological transient can't wind the
-  // integral up unbounded; it never engages in ordinary use.
-  s.z=Math.max(-P.zClamp, Math.min(P.zClamp, s.z+dt*dz));
-  s.m[0]=mx; s.m[1]=my; s.pibar=pibar; s.theta=theta; s.Fset=Fset;
-  return s;
+  for(i=0;i<n;i++){ lv.p[i]=Math.max(P.eps,lv.p[i]+dt*_dp[i]); sum+=lv.p[i]; lv.rho[i]=Math.max(P.rhoMin,lv.rho[i]+dt*_drho[i]); }
+  for(i=0;i<n;i++) lv.p[i]/=sum;
+  lv.m[0]=mx; lv.m[1]=my; lv.pibar=pibar;
+}
+
+// the single fill homeostat (organism mood). Feast/famine shifts the setpoint
+// it defends; it is driven by the top level's mean payoff.
+function stepFill(fl, P, pibar, dt){
+  var Fset=P.Fstar*(1+P.envGain*P.env);
+  var theta=P.theta0+P.kP*(fl.F-Fset)+P.kI*fl.z;
+  var dF=fl.F*(P.a*pibar - theta + P.sigmaF*randn());  // sigmaF = always-on randomness
+  fl.F=Math.max(0,fl.F+dt*dF);
+  // anti-windup: clamp the integrator well outside the normal range (~|z|<3)
+  fl.z=Math.max(-P.zClamp, Math.min(P.zClamp, fl.z+dt*(fl.F-Fset)));
+  fl.Fset=Fset; fl.theta=theta;
+}
+
+// advance the whole stack one tick, top-down (each level's target is the level
+// above's consensus; the top tracks the world y)
+function stepStack(levels, fl, P, y, dt){
+  for(var k=0;k<levels.length;k++){
+    var target = (k===0) ? y : levels[k-1].m;
+    stepDivision(levels[k], P, target, dt);
+  }
+  stepFill(fl, P, levels[0].pibar, dt);
 }
 
 // ===========================================================================
@@ -315,7 +332,8 @@ function clear(ctx,w,h){ ctx.fillStyle="#0a0f15"; ctx.fillRect(0,0,w,h); }
 // shared y-axis ceiling for the fill (gauge and trace), so both read at one scale
 function fillAxisMax(P){ return Math.max(2.6, P.Fstar+1.8); }
 
-function drawChannel(cv, s, u, y, layer){
+function drawChannel(cv, lv, target, isTop){
+  var s=lv, u=lv.u, y=target;   // this level's contest, tracking its target
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;   // hidden / collapsed panel: nothing to draw
   // Constant frame: the view always shows model radius up to VIEW (the world can
@@ -346,13 +364,10 @@ function drawChannel(cv, s, u, y, layer){
     ctx.fillText(String(i+1), cx+u[i][0]*R*0.82, cy-u[i][1]*R*0.82);
   }
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-  // yhat (discounted evidence) shown faint in fit layer
-  if(layer==="3"||layer==="all"){
-    ctx.strokeStyle="rgba(200,182,90,.8)"; ctx.lineWidth=1.5;
-    var yh=s.yhat; ctx.beginPath(); ctx.arc(X(yh),Y(yh),5,0,2*Math.PI); ctx.stroke();
-    ctx.fillStyle="rgba(200,182,90,.85)"; ctx.font="10px monospace"; ctx.fillText("yhat",X(yh)+8,Y(yh)+3);
-  }
-  // evidence y (the world): hollow cyan ring
+  // yhat (the discounted target this level actually scores against), faint
+  ctx.strokeStyle="rgba(200,182,90,.7)"; ctx.lineWidth=1.5;
+  var yh=s.yhat; ctx.beginPath(); ctx.arc(X(yh),Y(yh),5,0,2*Math.PI); ctx.stroke();
+  // the target: the world (top level) or the level above's pick (cyan ring)
   ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(X(y),Y(y),7,0,2*Math.PI); ctx.stroke();
   // line m->y to read tracking
@@ -365,8 +380,8 @@ function drawChannel(cv, s, u, y, layer){
   function key(yy, draw, txt){ draw(yy); ctx.fillStyle="#8da2b2"; ctx.textAlign="left"; ctx.fillText(txt, 30, yy); }
   key(h-54, function(yy){ ctx.fillStyle="rgba(120,150,170,.6)"; ctx.beginPath(); ctx.arc(13,yy,2.5,0,2*Math.PI); ctx.fill(); ctx.beginPath(); ctx.arc(20,yy,4.5,0,2*Math.PI); ctx.fill(); }, "options (size = its share)");
   key(h-40, function(yy){ ctx.fillStyle="rgba(170,194,212,.95)"; ctx.beginPath(); ctx.arc(16,yy,5,0,2*Math.PI); ctx.fill(); ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(16,yy,7,0,2*Math.PI); ctx.stroke(); }, "leader (the winner)");
-  key(h-26, function(yy){ ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.fill(); }, "m = the system's guess");
-  key(h-12, function(yy){ ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.stroke(); }, "y = the world");
+  key(h-26, function(yy){ ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.fill(); }, "m = this level's pick");
+  key(h-12, function(yy){ ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.stroke(); }, isTop?"y = the world":"target = level above");
   // gap between guess and world = tracking error
   if(dist(s.m,y)>0.18){
     var mxp=(X(s.m)+X(y))/2, myp=(Y(s.m)+Y(y))/2;
@@ -376,7 +391,8 @@ function drawChannel(cv, s, u, y, layer){
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
 }
 
-function drawDivision(cv, s, layer){
+function drawDivision(cv, lv){
+  var s=lv;
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;
   var n=s.p.length, pad=10, top=24, bw=(w-2*pad)/n;
@@ -400,13 +416,11 @@ function drawDivision(cv, s, layer){
   ctx.fillStyle="#cfe0ec"; ctx.font="9px monospace"; ctx.textAlign="center";
   ctx.fillText("winner", pad+win*bw+bw/2, base+H-H*s.p[win]-5);
   ctx.textAlign="left";
-  var hint = (layer==="2"||layer==="all")
-    ? "each bar = a coalition's mass; collapse onto one = condensation"
-    : "x-axis = the 8 options (the clock dots); bar height = its share";
-  ctx.fillStyle="#7d8f9c"; ctx.font="10px monospace"; ctx.fillText(hint, 10, h-4);
+  ctx.fillStyle="#7d8f9c"; ctx.font="10px monospace";
+  ctx.fillText("x-axis = the "+n+" options (the clock dots); bar height = its share", 10, h-4);
 }
 
-function drawFill(cv, s, P){
+function drawFill(cv, s, P){   // s = the organism fill {F, Fset}
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;
   var pad=24, top=24, bot=h-16, gx=w/2;
@@ -438,8 +452,9 @@ function drawFill(cv, s, P){
   ctx.textAlign="left";
 }
 
-// scrolling traces
-function drawTraces(cv, buf, P, layer){
+// scrolling traces for the viewed level (dominance H, tracking error) + the
+// organism fill F (shared across all levels)
+function drawTraces(cv, buf, P, viewLevel){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;
   var pad=6, top=24, H=h-top-6, x0=pad, gutter=122, x1=w-pad-gutter;
@@ -449,9 +464,9 @@ function drawTraces(cv, buf, P, layer){
   var N=buf.F.length; if(N<2) return;
   function plot(arr, lo, hi, col){
     ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
-    var lastY=top;
+    var lastY=top, M=arr.length, off=M-N;
     for(var i=0;i<N;i++){
-      var v=(arr[i]-lo)/(hi-lo); v=v<0?0:(v>1?1:v);
+      var v=(arr[i+off]-lo)/(hi-lo); v=v<0?0:(v>1?1:v);
       var x=x0+(x1-x0)*i/(N-1), y=top+H*(1-v);
       if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
       lastY=y;
@@ -459,15 +474,13 @@ function drawTraces(cv, buf, P, layer){
     ctx.stroke();
     return lastY;
   }
-  var show={F:true,H:true,err:true};
-  if(layer==="2"){ show={F:false,H:true,err:false}; }
-  else if(layer==="3"){ show={F:false,H:false,err:true}; }
   var Fmax=fillAxisMax(P);
+  var Hv=buf.H[viewLevel], errV=buf.err[viewLevel];
   // each line, then a label parked at the line's right-hand end, in its colour
   var labels=[];
-  if(show.F)   labels.push({end:plot(buf.F, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
-  if(show.H)   labels.push({end:plot(buf.H, 0, 1, "#ffb000"),     col:"#ffb000", txt:"dominance H"});
-  if(show.err) labels.push({end:plot(buf.err, 0, 1.8, "#36b6c8"), col:"#36b6c8", txt:"tracking error"});
+  labels.push({end:plot(buf.F, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
+  labels.push({end:plot(Hv, 0, 1, "#ffb000"),        col:"#ffb000", txt:"dominance H"});
+  labels.push({end:plot(errV, 0, 1.8, "#36b6c8"),    col:"#36b6c8", txt:"tracking error"});
   // label y starts at the line end, then de-overlap vertically (keeps `end` for the connector)
   labels.sort(function(a,b){return a.end-b.end;});
   for(var i=0;i<labels.length;i++){ labels[i].ly = i===0 ? labels[i].end : Math.max(labels[i].end, labels[i-1].ly+13); }
@@ -488,10 +501,16 @@ function drawTraces(cv, buf, P, layer){
 // UI  (controls, layer picker, rAF loop)
 // ===========================================================================
 var P=Object.assign({}, CONFIG);
-var seed=0, u=makeU(P.n, seed);
-var s=initState(P);
-var t=0, speed=1, paused=false, layer="1";
+// the nested stack: levels[0] is the top (level n, tracks the world), each
+// deeper level chases the one above. fill is the single organism homeostat.
+var levels=[]; for(var _k=0;_k<P.levels;_k++) levels.push(initLevel(P, _k*1.7+0.4));
+var fill=initFill(P);
+var viewLevel=0;                 // which level the panels are drilled into
+var t=0, speed=1, paused=false;
 var yJump=[0,0];
+// the target each level tracks (top = the world, others = parent's consensus)
+function levelTarget(k){ return k===0 ? evidence(t) : levels[k-1].m; }
+function levelName(k){ return k===0 ? "level n (top)" : (k===levels.length-1 ? "cellular (bottom)" : "level n-"+k); }
 
 function evidence(time){
   // the world drifts slowly enough that a healthy field keeps continuous lock;
@@ -501,8 +520,11 @@ function evidence(time){
 
 // rolling buffers. A long trace history so a regime has room to play out
 // (several bipolar cycles, the slow evidence wander) before it scrolls off.
+// H and err are kept per level (so drilling into a level shows its own history);
+// F is the single organism fill. ews drives the classifier off the top level.
 var BUFLEN=4200;
-var buf={F:[],H:[],err:[]};
+var buf={F:[], H:[], err:[]};       // H[k], err[k] are arrays per level
+for(var _b=0;_b<P.levels;_b++){ buf.H.push([]); buf.err.push([]); }
 var ewsH=[], ewsF=[];
 
 function el(id){ return document.getElementById(id); }
@@ -538,32 +560,23 @@ slider(el("ctl-phi"),"phi","Precision flexibility","phi",f2,"toward 0: precision
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
 
-// layer picker
-function setLayer(L){
-  layer=L;
-  Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", b.dataset.layer===L); });
-  // show/hide panels
-  Array.prototype.forEach.call(document.querySelectorAll(".panel[data-layers]"), function(pan){
-    var set=pan.getAttribute("data-layers").split(" ");
-    pan.classList.toggle("hidden", set.indexOf(L)<0);
-  });
-  // captions / notes per layer
-  var notes={
-    "1":"Layer 1, the contest. Coalitions bid for the one channel; the division p says who wins and how dominant, the fill F how much competes. Drive a control out of range and a disorder falls out.",
-    "2":"Layer 2, the coalition layer. Read the division as mass: high dominance H is condensation onto one coalition (the monopoly). Raising the integrating gain past threshold collapses the field onto a single winner.",
-    "3":"Layer 3, what fit answers to. m is the shared state, y the world, yhat the discounted evidence the system actually scores against. Tracking error is fit. A short discount horizon chases y and loses the thread.",
-    "all":"All layers at once: the contest (division and fill), the coalition reading (dominance), and fit (m vs y vs yhat) together."
-  };
-  el("layerNote").textContent=notes[L];
-  el("capTrSub").textContent = L==="2"?"dominance H":(L==="3"?"tracking error":"F, dominance H, tracking error");
-  // force canvases to re-fit next frame
+// layer picker -> which level of the stack the panels drill into
+function viewNote(k){
+  if(k===0) return "Level n, the top. This contest tracks the external world directly, and its pick becomes the target every level below must chase. The headline regime is read here: the whole stack collated to the top.";
+  if(k===levels.length-1) return "Cellular, the bottom of the stack. The finest contest, chasing the level above. The same four controls govern it; a malfunction set up top reaches all the way down.";
+  return "Level n-"+k+", a subordinate contest. Its world is the pick (m) of the level above; it runs the same allocator dynamics one scale finer. A control set wrong is wrong at every scale.";
+}
+function setView(k){
+  viewLevel=k;
+  Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", +b.dataset.layer===k); });
+  el("layerNote").textContent=viewNote(k);
   resizeAll();
 }
-Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setLayer(b.dataset.layer); }; });
+Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setView(+b.dataset.layer); }; });
 
 // buttons
 el("btnShift").onclick=function(){ var a=Math.random()*2*Math.PI; yJump=[0.55*Math.cos(a),0.55*Math.sin(a)]; };
-el("btnReseed").onclick=function(){ seed=Math.random()*2*Math.PI; u=makeU(P.n,seed); };
+el("btnReseed").onclick=function(){ for(var k=0;k<levels.length;k++) levels[k].u=makeU(P.n, Math.random()*2*Math.PI); };
 var btnPause=el("btnPause");
 btnPause.onclick=function(){ paused=!paused; btnPause.textContent=paused?"run":"pause"; };
 el("btnStep").onclick=function(){ if(paused){ advance(); render(); } };
@@ -571,14 +584,21 @@ el("btnStep").onclick=function(){ if(paused){ advance(); render(); } };
 function resizeAll(){ ["ch","div","fill","tr"].forEach(function(id){ var c=el(id); c._w=-1; }); }
 window.addEventListener("resize", resizeAll);
 
-// one model-time advance (a frame's worth)
+// one model-time advance (a frame's worth): step the whole stack, then record
+// per-level dominance H and tracking error plus the organism fill F.
 function advance(){
   var steps=Math.max(1,Math.round(P.substeps*speed));   // speed scales throughput, dt stays fixed (stable)
-  for(var k=0;k<steps;k++){ t+=P.dt; step(s,P,u,evidence(t),P.dt); }
-  var H=herfindahl(s.p), y=evidence(t), err=dist(s.m,y);
-  buf.F.push(s.F); buf.H.push(H); buf.err.push(err);
-  if(buf.F.length>BUFLEN){ buf.F.shift(); buf.H.shift(); buf.err.shift(); }
-  ewsH.push(H); ewsF.push(s.F);
+  for(var st=0; st<steps; st++){ t+=P.dt; stepStack(levels, fill, P, evidence(t), P.dt); }
+  var y=evidence(t);
+  for(var k=0;k<levels.length;k++){
+    var tg = (k===0) ? y : levels[k-1].m;
+    buf.H[k].push(herfindahl(levels[k].p));
+    buf.err[k].push(dist(levels[k].m, tg));
+    if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); }
+  }
+  buf.F.push(fill.F); if(buf.F.length>BUFLEN) buf.F.shift();
+  // early-warning + classifier run on the collated top level
+  ewsH.push(buf.H[0][buf.H[0].length-1]); ewsF.push(fill.F);
   if(ewsH.length>P.ewsWin){ ewsH.shift(); ewsF.shift(); }
 }
 
@@ -586,18 +606,19 @@ function rollAmp(arr){ if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; 
 function rollMean(arr){ if(!arr.length) return 0; var s=0,n=0; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ s+=arr[i]; n++; } return s/n; }
 
 function updateDiag(){
-  var H=rollMean(buf.H);
-  var err=rollMean(buf.err);
-  var ampF=rollAmp(ewsF);
-  var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
-  var d={H:H, F:s.F, err:err, ampF:ampF};
-  var reg=classify(d,P);
+  // headline regime: the collated TOP level (the organism) + the organism fill
+  var Htop=rollMean(buf.H[0]), errTop=rollMean(buf.err[0]), ampF=rollAmp(ewsF);
+  var reg=classify({H:Htop, F:fill.F, err:errTop, ampF:ampF}, P);
   var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
+  // readout: the level you are viewing, plus the organism fill and top-level EWS
+  var Hv=rollMean(buf.H[viewLevel]), errV=rollMean(buf.err[viewLevel]);
+  var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
   var rows=[
-    ["dominance H", H.toFixed(3)+" / "+(1/P.n).toFixed(3)],
-    ["fill F", s.F.toFixed(3)+" (F*"+P.Fstar.toFixed(1)+")"],
+    ["viewing", levelName(viewLevel)],
+    ["dominance H", Hv.toFixed(3)+" / "+(1/P.n).toFixed(3)],
+    ["fill F", fill.F.toFixed(3)+" (F*"+P.Fstar.toFixed(1)+")"],
     ["fill amp", ampF.toFixed(3), ampF>P.amp_osc],
-    ["track err", err.toFixed(3), err>P.errLost],
+    ["track err", errV.toFixed(3), errV>P.errLost],
     ["fold EWS", "ac1 "+acH.toFixed(2)+" v"+vH.toFixed(3)],
     ["Hopf EWS", "amp "+ampF.toFixed(2)+" v"+vF.toFixed(3)]
   ];
@@ -607,10 +628,11 @@ function updateDiag(){
 }
 
 function render(){
-  drawChannel(el("ch"), s, u, evidence(t), layer);
-  if(layer!=="3") drawDivision(el("div"), s, layer);
-  if(layer!=="2") drawFill(el("fill"), s, P);
-  drawTraces(el("tr"), buf, P, layer);
+  var lv=levels[viewLevel], tg=levelTarget(viewLevel), isTop=(viewLevel===0);
+  drawChannel(el("ch"), lv, tg, isTop);
+  drawDivision(el("div"), lv);
+  drawFill(el("fill"), fill, P);
+  drawTraces(el("tr"), buf, P, viewLevel);
   updateDiag();
 }
 
@@ -620,14 +642,12 @@ function loop(){
   requestAnimationFrame(loop);
 }
 function warmup(){
-  // settle the model to its steady state, then pre-fill the scrolling buffers
-  // with settled samples. Otherwise the cold start (uniform division, fill off
-  // its setpoint) scrolls across the left of the trace and reads as an averaging
-  // artifact rather than real dynamics.
-  for(var i=0;i<1200;i++){ t+=P.dt; step(s,P,u,evidence(t),P.dt); }
+  // settle the stack, then pre-fill the scrolling buffers with settled samples,
+  // so the trace opens already-settled instead of scrolling a cold-start curve.
+  for(var i=0;i<1200;i++){ t+=P.dt; stepStack(levels, fill, P, evidence(t), P.dt); }
   for(i=0;i<BUFLEN;i++) advance();
 }
-setLayer("1");
+setView(0);
 warmup();
 requestAnimationFrame(loop);
 </script>

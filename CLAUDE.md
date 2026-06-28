@@ -69,7 +69,12 @@ traces and EWS numbers, not in a collapsed state. Do not fake a label for them.
   them back.
 - **Randomness is "feast vs famine"** with +/− valence (the reproductive
   environment: surplus vs deficit), not a generic "randomness"/"stressor" knob.
-- **Layer picker** offers 1 / 2 / 3 / last(all). Keep it.
+- **Layers are a nested stack of contests**, not view-framings. The model is a
+  top-down stack: level n (top) tracks the world; each lower level (n-1 ...
+  cellular) is its own live allocator contest chasing its parent's pick `m`. The
+  four controls act at every scale (malfunctions cascade down). The top is the
+  collated headline (classifier reads `levels[0]`); the picker (level n / n-1 /
+  n-2 / cellular) drills the panels into a level. One shared fill `F`.
 - **No hysteresis graphs** or non-core printouts. The user removed them as an
   obvious idea not worth a full readout.
 
