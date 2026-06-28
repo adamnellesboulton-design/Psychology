@@ -309,13 +309,17 @@ function clear(ctx,w,h){ ctx.fillStyle="#0a0f15"; ctx.fillRect(0,0,w,h); }
 
 function drawChannel(cv, s, u, y, layer){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
-  var cx=w/2, cy=h/2, R=Math.min(w,h)*0.42;
+  // Constant frame: the view always shows model radius up to VIEW (the world can
+  // swing out past the unit circle after a context shift), so every state is drawn
+  // at the same scale and is directly comparable -- never reframed for the extremes.
+  var cx=w/2, cy=h/2, VIEW=1.6, R=(Math.min(w,h)/2 - 16)/VIEW;
   function X(p){ return cx+p[0]*R; } function Y(p){ return cy-p[1]*R; }
-  // grid: unit circle + crosshairs
+  // grid: unit circle + crosshairs + faint view boundary
   ctx.strokeStyle="#102029"; ctx.lineWidth=1;
   ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.stroke();
   ctx.beginPath(); ctx.arc(cx,cy,R*0.5,0,2*Math.PI); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
+  ctx.strokeStyle="#0c161d"; ctx.beginPath(); ctx.arc(cx,cy,R*VIEW,0,2*Math.PI); ctx.stroke();
   // winner
   var win=0; for(var i=1;i<u.length;i++) if(s.p[i]>s.p[win]) win=i;
   // the options (coalitions) sit at fixed clock positions; dot size = its share.
@@ -327,7 +331,12 @@ function drawChannel(cv, s, u, y, layer){
     ctx.fillStyle = i===win ? "rgba(170,194,212,.95)" : "rgba(120,150,170,.45)";
     ctx.fill();
     if(i===win){ ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(X(u[i]),Y(u[i]),r+4,0,2*Math.PI); ctx.stroke(); }
+    // option number, just inside the rim like a clock face (matches the bar chart)
+    ctx.fillStyle = i===win ? "#cfe0ec" : "rgba(120,150,170,.6)";
+    ctx.font="9px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(String(i+1), cx+u[i][0]*R*0.82, cy-u[i][1]*R*0.82);
   }
+  ctx.textAlign="left"; ctx.textBaseline="alphabetic";
   // yhat (discounted evidence) shown faint in fit layer
   if(layer==="3"||layer==="all"){
     ctx.strokeStyle="rgba(200,182,90,.8)"; ctx.lineWidth=1.5;
@@ -360,25 +369,30 @@ function drawChannel(cv, s, u, y, layer){
 
 function drawDivision(cv, s, layer){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
-  var n=s.p.length, pad=10, top=26, bw=(w-2*pad)/n;
+  var n=s.p.length, pad=10, top=24, bw=(w-2*pad)/n;
   var win=0; for(var i=1;i<n;i++) if(s.p[i]>s.p[win]) win=i;
-  // baseline at 1/n
-  var base=top, H=h-top-14;
+  // y = share of the channel; bottom rows reserved for the option numbers + hint
+  var base=top, H=h-top-30;
   ctx.strokeStyle="#16222c"; ctx.setLineDash([3,3]);
   var y1n=base+H*(1-1/n); ctx.beginPath(); ctx.moveTo(pad,y1n); ctx.lineTo(w-pad,y1n); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.textAlign="right"; ctx.fillText("even split (1/n)", w-pad-2, y1n-3); ctx.textAlign="left";
+  // one bar per option; height = its share. Leader uses the same colour as the
+  // clock's leader dot so the two views read as the same eight options.
   for(i=0;i<n;i++){
     var bh=H*s.p[i], x=pad+i*bw+1;
-    ctx.fillStyle = i===win ? "#ffb000" : "#2f4250";
+    ctx.fillStyle = i===win ? "rgba(170,194,212,.95)" : "#2f4250";
     ctx.fillRect(x, base+H-bh, bw-2, bh);
+    // x-axis: the option number (matches the number on the clock)
+    ctx.fillStyle = i===win ? "#aac2d4" : "#5d7180"; ctx.font="9px monospace"; ctx.textAlign="center";
+    ctx.fillText(String(i+1), pad+i*bw+bw/2, base+H+11);
   }
-  // mark the leader so the bar chart reads at a glance
-  ctx.fillStyle="#ffb000"; ctx.font="9px monospace"; ctx.textAlign="center";
+  // mark the leader
+  ctx.fillStyle="#cfe0ec"; ctx.font="9px monospace"; ctx.textAlign="center";
   ctx.fillText("winner", pad+win*bw+bw/2, base+H-H*s.p[win]-5);
   ctx.textAlign="left";
   var hint = (layer==="2"||layer==="all")
     ? "each bar = a coalition's mass; collapse onto one = condensation"
-    : "each bar = one coalition; tall bar = it is winning";
+    : "x-axis = the 8 options (the clock dots); bar height = its share";
   ctx.fillStyle="#7d8f9c"; ctx.font="10px monospace"; ctx.fillText(hint, 10, h-4);
 }
 
@@ -441,7 +455,7 @@ function drawTraces(cv, buf, P, layer){
   var labels=[];
   if(show.F)   labels.push({end:plot(buf.F, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
   if(show.H)   labels.push({end:plot(buf.H, 0, 1, "#ffb000"),     col:"#ffb000", txt:"dominance H"});
-  if(show.err) labels.push({end:plot(buf.err, 0, 1.6, "#36b6c8"), col:"#36b6c8", txt:"tracking error"});
+  if(show.err) labels.push({end:plot(buf.err, 0, 1.8, "#36b6c8"), col:"#36b6c8", txt:"tracking error"});
   // label y starts at the line end, then de-overlap vertically (keeps `end` for the connector)
   labels.sort(function(a,b){return a.end-b.end;});
   for(var i=0;i<labels.length;i++){ labels[i].ly = i===0 ? labels[i].end : Math.max(labels[i].end, labels[i-1].ly+13); }
