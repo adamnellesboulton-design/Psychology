@@ -390,29 +390,53 @@ function drawChannel(cv, lv, target, isTop){
     ctx.fillText("gap = error", mxp, myp-6);
   }
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-  // bid map (density of the whole stack): every coalition plotted by win share
-  // (x) vs epistemic rating rho (y). The averages collapse this to a point; here
-  // the range stays visible and each condition has its own cloud shape.
-  var sz=Math.min(120, Math.max(70, Math.min(w,h)*0.28));
-  if(w>260 && h>260) drawDensity(ctx, w-sz-12, h-sz-12, sz);
 }
 
-function drawDensity(ctx, ox, oy, sz){
-  ctx.strokeStyle="#16242e"; ctx.lineWidth=1; ctx.strokeRect(ox, oy, sz, sz);
-  ctx.fillStyle="#5d7180"; ctx.font="8px monospace"; ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-  ctx.fillText("bid map: wins x epistemic", ox, oy-4);
+// the default view: a map of every bid across the whole stack, plotted by win
+// share (x) vs epistemic rating rho (y). The averages collapse this to a point;
+// here the range of wins and the range of "real" stay visible, and each
+// condition has its own cloud shape. Click a point to open the clock for it.
+var _bidGeo=[];
+function drawBidMap(cv){
+  var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
+  if(w<40||h<40) return;
+  var L=54, Rr=18, T=22, B=h-34;        // plot box: left/right/top/bottom margins
+  var x0=L, x1=w-Rr, y0=T, y1=B;
+  function PX(p){ return x0+Math.min(1,Math.max(0,p))*(x1-x0); }
+  function PY(rho){ return y1-Math.min(1,Math.max(0,rho/P.rho0))*(y1-y0); }
+  // frame + gridlines at 0,.25,.5,.75,1
+  ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1; ctx.fillStyle="#46586a"; ctx.font="9px monospace";
+  for(var g=0;g<=4;g++){
+    var gx=x0+(x1-x0)*g/4, gy=y1-(y1-y0)*g/4;
+    ctx.beginPath(); ctx.moveTo(gx,y0); ctx.lineTo(gx,y1); ctx.moveTo(x0,gy); ctx.lineTo(x1,gy); ctx.stroke();
+    ctx.textAlign="center"; ctx.fillText((g/4).toFixed(2), gx, y1+12);
+    ctx.textAlign="right"; ctx.fillText((g/4).toFixed(2), x0-5, gy+3);
+  }
+  // axis titles
+  ctx.fillStyle="#8da2b2"; ctx.font="10px monospace"; ctx.textAlign="center";
+  ctx.fillText("win share  (who is winning)", (x0+x1)/2, h-6);
+  ctx.save(); ctx.translate(14,(y0+y1)/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText("epistemic rating rho  (fit to the real)", 0, 0); ctx.restore();
+  // every bid: viewed level bright amber, other levels faint grey. Bigger dot =
+  // bigger win (redundant with x, but makes the leaders pop).
+  _bidGeo.length=0;
   for(var k=0;k<levels.length;k++){
     var lv=levels[k], on=(k===viewLevel);
     for(var i=0;i<lv.p.length;i++){
-      var px=ox+Math.min(1,lv.p[i])*sz;
-      var py=oy+sz*(1-Math.min(1,lv.rho[i]/P.rho0));
-      ctx.fillStyle = on ? "rgba(255,176,0,.85)" : "rgba(120,150,170,.35)";
-      ctx.beginPath(); ctx.arc(px,py, on?2.6:1.8, 0, 2*Math.PI); ctx.fill();
+      var px=PX(lv.p[i]), py=PY(lv.rho[i]);
+      _bidGeo.push({k:k,i:i,x:px,y:py});
+      ctx.fillStyle = on ? "rgba(255,176,0,.9)" : "rgba(120,150,170,.32)";
+      ctx.beginPath(); ctx.arc(px,py, (on?3:2)+3*lv.p[i], 0, 2*Math.PI); ctx.fill();
+      if(on && i===sel){ ctx.strokeStyle="#d6e6f2"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(px,py,8,0,2*Math.PI); ctx.stroke(); }
     }
   }
-  ctx.fillStyle="#46586633"; // axis ticks faint
-  ctx.fillStyle="#5d7180"; ctx.font="8px monospace";
-  ctx.fillText("wins>", ox+sz-26, oy+sz+9);
+  // compact legend inside the plot, top-right (clear of the panel caption)
+  ctx.textAlign="right"; ctx.font="9px monospace"; ctx.textBaseline="middle";
+  ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(x1-118,y0+8,3,0,2*Math.PI); ctx.fill();
+  ctx.fillStyle="#8da2b2"; ctx.fillText("this level", x1-60, y0+8);
+  ctx.fillStyle="rgba(120,150,170,.5)"; ctx.beginPath(); ctx.arc(x1-44,y0+8,3,0,2*Math.PI); ctx.fill();
+  ctx.fillStyle="#8da2b2"; ctx.fillText("others", x1, y0+8);
+  ctx.textBaseline="alphabetic"; ctx.textAlign="left";
 }
 
 // expose bar geometry so a click can be mapped back to a coalition index
@@ -629,13 +653,17 @@ el("div").onclick=function(ev){
 };
 el("ch").onclick=function(ev){
   var r=this.getBoundingClientRect(), w=this.clientWidth, h=this.clientHeight;
-  var cx=w/2, cy=h/2, VIEW=1.6, R=(Math.min(w,h)/2-16)/VIEW;
-  var mx=ev.clientX-r.left, my=ev.clientY-r.top, lv=levels[viewLevel], best=-1, bd=1e9;
-  for(var i=0;i<lv.u.length;i++){
-    var dx=mx-(cx+lv.u[i][0]*R), dy=my-(cy-lv.u[i][1]*R), d=dx*dx+dy*dy;
-    if(d<bd){ bd=d; best=i; }
+  var mx=ev.clientX-r.left, my=ev.clientY-r.top, i, dx, dy, d, best=-1, bd=1e9;
+  if(sel>=0){
+    // clock is open: click a dot to inspect another bid, empty space to close
+    var cx=w/2, cy=h/2, VIEW=1.6, R=(Math.min(w,h)/2-16)/VIEW, lv=levels[viewLevel];
+    for(i=0;i<lv.u.length;i++){ dx=mx-(cx+lv.u[i][0]*R); dy=my-(cy-lv.u[i][1]*R); d=dx*dx+dy*dy; if(d<bd){bd=d;best=i;} }
+    sel = (bd>900) ? -1 : best;
+  } else {
+    // bid map is open: click a point to drill to its level + open its clock
+    for(i=0;i<_bidGeo.length;i++){ var g=_bidGeo[i]; dx=mx-g.x; dy=my-g.y; d=dx*dx+dy*dy; if(d<bd){bd=d;best=i;} }
+    if(best>=0 && bd<400){ var gg=_bidGeo[best]; setView(gg.k); sel=gg.i; }
   }
-  sel = (bd>900 || best===sel) ? -1 : best;   // within ~30px, else clear
 };
 
 // one model-time advance (a frame's worth): step the whole stack, then record
@@ -664,40 +692,47 @@ function updateDiag(){
   var Htop=rollMean(buf.H[0]), errTop=rollMean(buf.err[0]), ampF=rollAmp(ewsF);
   var reg=classify({H:Htop, F:fill.F, err:errTop, ampF:ampF}, P);
   var rl=el("regime"); rl.textContent=reg.label; rl.classList.toggle("alert",reg.alert);
-  // readout: the level you are viewing, plus the organism fill and top-level EWS
-  var Hv=rollMean(buf.H[viewLevel]), errV=rollMean(buf.err[viewLevel]);
+  // readout leads with the individual register (averages are not the point);
+  // a little context (which level, the organism mood) and the early-warning footer.
   var acH=lag1ac(ewsH), vH=variance(ewsH), vF=variance(ewsF);
+  var moodTag = fill.F>P.Fstar+P.band?" manic" : fill.F<P.Fstar-P.band?" low" : " in band";
   var rows=[
     ["viewing", levelName(viewLevel)],
-    ["dominance H", Hv.toFixed(3)+" / "+(1/P.n).toFixed(3)],
-    ["fill F", fill.F.toFixed(3)+" (F*"+P.Fstar.toFixed(1)+")"],
-    ["fill amp", ampF.toFixed(3), ampF>P.amp_osc],
-    ["track err", errV.toFixed(3), errV>P.errLost]
+    ["mood F", fill.F.toFixed(2)+moodTag, (fill.F>P.Fstar+P.band||fill.F<P.Fstar-P.band)]
   ];
-  // individual register for a selected coalition (its own un-averaged numbers)
   if(sel>=0 && sel<P.n){
     var lv=levels[viewLevel];
     var fit=dist(lv.u[sel], lv.yhat);     // distance to the evidence it scores against
     rows.push(
       ["bid #"+(sel+1), "(click to clear)"],
-      ["  win p", lv.p[sel].toFixed(3)],
-      ["  epistemic rho", lv.rho[sel].toFixed(3)+" / "+P.rho0.toFixed(1)],
+      ["  win share", lv.p[sel].toFixed(3)],
+      ["  epistemic rho", lv.rho[sel].toFixed(3)],
       ["  fit to real", fit.toFixed(2)]
     );
   } else {
-    rows.push(
-      ["fold EWS", "ac1 "+acH.toFixed(2)+" v"+vH.toFixed(3)],
-      ["Hopf EWS", "amp "+ampF.toFixed(2)+" v"+vF.toFixed(3)]
-    );
+    rows.push(["bid", "click to inspect"]);
   }
+  // early-warning footer (precursors of a fold / Hopf; kept small)
+  rows.push(
+    ["fold EWS", "ac1 "+acH.toFixed(2)+" v"+vH.toFixed(3)],
+    ["Hopf EWS", "amp "+ampF.toFixed(2)+" v"+vF.toFixed(3)]
+  );
   var html="";
   rows.forEach(function(r){ html+='<div class="d'+(r[2]?' warn':'')+'"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>'; });
   el("diag").innerHTML=html;
 }
 
+var _capState="";
+function setCap(html){ if(html!==_capState){ el("capCh").innerHTML=html; _capState=html; } }
 function render(){
-  var lv=levels[viewLevel], tg=levelTarget(viewLevel), isTop=(viewLevel===0);
-  drawChannel(el("ch"), lv, tg, isTop);
+  var lv=levels[viewLevel];
+  if(sel>=0){   // a bid is selected: open the clock for its geometric context
+    drawChannel(el("ch"), lv, levelTarget(viewLevel), viewLevel===0);
+    setCap('the clock <span class="sub">bid #'+(sel+1)+', '+levelName(viewLevel)+' (click to close)</span>');
+  } else {      // default: the distribution of bids, not the average
+    drawBidMap(el("ch"));
+    setCap('bids <span class="sub">win share x epistemic rating; click one to open the clock</span>');
+  }
   drawDivision(el("div"), lv);
   drawFill(el("fill"), fill, P);
   drawTraces(el("tr"), buf, P, viewLevel);
