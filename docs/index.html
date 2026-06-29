@@ -161,7 +161,7 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
       <div class="group">
         <h2>Environment <span class="tag">fitness, surplus vs deficit</span></h2>
         <div class="ctl" id="ctl-env"></div>
-        <p class="note">Feast vs famine sets the reproductive environment: feast (+) is a surplus that grows the fill, famine (-) a deficit that starves it. Randomness rides on it, always on. Mood tracks the fill level: feast lifts it (manic), famine lowers it (depressed); bipolar swings between the two.</p>
+        <p class="note">Feast vs famine is the reproductive tilt on enrolment: feast (+) tilts each level's population (its fill) toward increase, famine (-) toward decrease. It is proportional, so it scales with the population already enrolled, and applies per level. Randomness rides on it, always on. Mood tracks the fill level: feast lifts it (manic), famine lowers it (depressed); bipolar swings between the two.</p>
       </div>
       <div class="group">
         <h2>World &amp; run</h2>
@@ -211,7 +211,8 @@ var CONFIG = {
   tauMin:0.2, tauMax:6.0, eps:1e-6,
   yR:0.85,            // radius of the moving evidence (reachable when the field concentrates)
   // additions (flagged): environment + noise
-  env:0.0,            // feast (+1) .. famine (-1); reproductive surplus/deficit on the fill
+  env:0.0,            // feast (+1) .. famine (-1); reproductive tilt on enrolment --
+                      // whether each level's population (its fill) grows or shrinks
   envGain:0.85,       // how hard feast/famine moves the fill's setpoint
   sigmaF:0.035,       // always-on environmental noise on the fill (the "randomness")
   sigmaPi:0.015,      // small noise in the contest so winners can be unseated
@@ -330,9 +331,12 @@ function stepFill(lv, P, below, dt){
   // from compounding up the stack.
   if(below===null){ lv.Fsupply = P.Fstar; }                          // bottom: substrate baseline
   else { lv.Fsupply += dt*(below.Fsupply - lv.Fsupply)/P.tauSupply; } // slow track of below's supply
-  // feast/famine is applied PER LEVEL, as a multiplicative shift on that baseline,
-  // so its size scales with the level's own fill volume: a level holding more
-  // volume feels a proportionally larger surplus (feast) or deficit (famine).
+  // feast/famine is the reproductive ENROLMENT tilt, applied PER LEVEL: it tilts
+  // each level's population (its fill is the count enrolled in the contest)
+  // toward increase (feast) or decrease (famine). Multiplicative because
+  // reproduction is proportional -- the tilt scales with the level's current
+  // enrolled population, and lands per level. Feast lifts the defended
+  // population (manic), famine lowers it (depressed).
   var Fset=lv.Fsupply*(1+P.envGain*P.env);
   var theta=P.theta0 + lv.kP*(lv.F-Fset) + P.kI*lv.z;
   // a level RELAYS the disturbance from below in proportion to how undamped it

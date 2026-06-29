@@ -66,12 +66,16 @@ the live division view, the traces and the early-warning numbers, and use
 
 ## Feast and famine
 
-The **environment** control sets the fitness landscape the fill competes in:
+The **environment** control is the reproductive tilt on enrolment — whether a
+level's population (its fill, the count competing for the channel) tilts toward
+growing or shrinking. It is proportional (it scales with the population already
+enrolled) and applies per level:
 
-- **feast (+)** — a reproductive surplus; the fill's target rises and the
-  system floods.
-- **famine (−)** — a deficit; the target falls and the system starves.
-- **neutral (0)** — the homeostat's own target.
+- **feast (+)** — enrolment tilts toward increase; each level's population grows
+  and the system floods.
+- **famine (−)** — enrolment tilts toward decrease; the population shrinks and
+  the system starves.
+- **neutral (0)** — no tilt; the homeostat's own target holds.
 
 A small amount of randomness rides on the fill at all times (an always-on
 environmental wobble), so the system is never perfectly quiet.
