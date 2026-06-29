@@ -53,7 +53,7 @@ Grouped into the two kinds of fault.
 
 | Control | Healthy | Driven out of range |
 |---|---|---|
-| **Averaging clock `δ`** | 0.6 | The bar's clock — the horizon a level scores evidence over and averages the level below. Too short → chases the instant, never holds a thread (*ADHD*). Sibling of `kP`: the two faults of the one homeostat (clock vs damping). |
+| **Averaging clock `δ`** | 0.6 | The bar's clock — the horizon a level scores evidence over and averages its target across. Too short → chases the instant, never holds a thread (*ADHD*). Sibling of `kP`: the two faults of the one homeostat (clock vs damping). |
 | **Precision flexibility `φ`** | 1.0 | → 0 precision freezes; the system is slow to re-weight after a context shift (*autism*). |
 
 The two malfunctions produce **gross, named state changes** you can read off the
@@ -84,11 +84,13 @@ this level swinging between the two poles.
 
 The model is not one contest but a **stack of nested allocator contests**, one
 per scale: level _n_ at the top, then _n−1_, down to the **cellular** nucleus at
-the bottom. Coupling is **bottom-up**: only the bottom reads the external world;
-every level above reads the level below (its pick `m` as evidence, its fill `F`
-as a disturbance). **Clocks lengthen upward** — the bottom is fast and local,
-the top is slow and global (mood). Each level has its **own fill** with its own
-damping `kP`.
+the bottom. The two flows cross in **opposite directions**. Evidence/feedback
+flows **down**: only the **top** reads the external world, and its pick `m`
+propagates down as the target every level below tracks. Supply/throughput rises
+**up**: each level's fill `F` is disturbed by the fill of the level below it, so
+a break travels upward. **Clocks lengthen upward** — the bottom is fast and
+local (a quick end-effector), the top is slow, global (mood), and world-facing.
+Each level has its **own fill** with its own damping `kP`.
 
 The layer picker (level n / n−1 / n−2 / cellular) drills the panels into any
 level; `kP` is set on whichever level you're viewing.
@@ -112,7 +114,7 @@ Same Hopf, contained or propagated by depth. The **break depth** readout (how
 many levels are oscillating) is the quantitative form of severity. This is one
 disorder at different severities, *not* bipolar-vs-ADHD. ADHD stays the clock
 fault (`delta` short); the division pair (schizophrenia/autism) is separate,
-read at the nucleus.
+read at the top, where the contest faces the world.
 
 ## Notes
 

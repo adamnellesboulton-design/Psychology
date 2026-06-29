@@ -93,21 +93,28 @@ depth.
 
 ### Coupling the levels (this is the architecture; get it exact)
 Run the identical `step()` core at each level `N`. Not independent stacked
-copies; each reads the one beneath:
+copies; each is coupled to its neighbours — supply from the level below,
+evidence from the level above:
 - **Supply from below.** `F_N` is the throughput of `N-1`, not a free scalar.
   Drive it from `N-1`'s output rate (its `pibar` / winning coalition's sustained
-  output).
+  output). Supply rises UP the stack.
 - **Bar from below.** `theta_N`'s resting value tracks `N-1`'s sustainable
   output. Do **not** expose independent free `kP_N`, `kI_N` per level; the
   damping regulating `F_N` is how fast `N-1` re-settles, let it emerge from the
   coupling. (If the build gives each level its own `kP`, refactor so it's
   inherited from below.)
-- **Evidence from below.** `y_N` is the winning `m` of `N-1`. Only the bottom
-  reads external `y`.
+- **Evidence from ABOVE (feedback flows down).** Only the **top** reads external
+  `y` (the world). `y_N` for every lower level is the winning `m` of the level
+  *above* it — the top's pick propagates down as the target each level below
+  tracks. Evidence/feedback flows DOWN; this is the opposite direction from
+  supply, which rises up. (This reverses the earlier "evidence from below" /
+  bottom-reads-world wording — that is VOID.)
 - **Clocks lengthen upward.** Each level's time constants a fixed factor slower
-  than the one below. Top = mood/global/slowest, bottom = fast/local.
-- **Bottom is the nucleus.** Lowest level where the bar comes alive; below it a
-  fixed sieve, do not recurse past it.
+  than the one below. Top = mood/global/slowest **and world-facing**, bottom =
+  fast/local end-effector.
+- **Top is the world-reader; bottom is the fast nucleus.** The world enters at
+  the slow top; the bottom is the fastest local contest, driven by feedback from
+  above and feeding its supply up. Do not recurse past the bottom.
 
 ### The break, and containment (severity, bipolar only)
 Inject loss of fill damping (`kP -> 0`) as a lesion at a chosen level `N`. Watch
@@ -146,14 +153,18 @@ fast break from below is absorbed by the slow levels above.
   them back.
 - **Randomness is "feast vs famine"** with +/− valence (the reproductive
   environment: surplus vs deficit), not a generic "randomness"/"stressor" knob.
-- **Layers are a nested stack of contests**, not view-framings. The model is a
-  BOTTOM-UP stack: only the bottom nucleus reads the world; each level above
-  reads the level below (its `m` as evidence, its fill `F` as a disturbance).
-  Each level is a live allocator contest with its OWN fill and per-level `kP`
-  (the lesion site). Clocks lengthen upward (top slowest). The picker (level n /
-  n-1 / n-2 / cellular) drills the panels into a level; `kP` is set on the viewed
-  level. Headline reads division at the bottom, fill at the top (see recursion
-  section). Do not revert to one shared fill or a top-down evidence flow.
+- **Layers are a nested stack of contests**, not view-framings. The two flows
+  cross in OPPOSITE directions: **evidence/feedback flows DOWN** (only the *top*
+  reads the world; each level below tracks the level *above*'s `m` as its
+  target), while **supply/throughput rises UP** (a level's fill `F` is disturbed
+  by the fill of the level below it, so a break propagates upward). Each level is
+  a live allocator contest with its OWN fill and per-level `kP` (the lesion
+  site). Clocks lengthen upward (top slowest, and world-facing; bottom fast and
+  local). The picker (level n / n-1 / n-2 / cellular) drills the panels into a
+  level; `kP` is set on the viewed level. Headline is read at the TOP — the slow,
+  world-facing level that collates the stack (division AND fill both read there).
+  Do not revert to one shared fill, to bottom-reads-world, or to evidence rising
+  up from below.
 - **No hysteresis graphs** or non-core printouts. The user removed them as an
   obvious idea not worth a full readout.
 
