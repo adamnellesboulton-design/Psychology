@@ -19,8 +19,7 @@
 :root{
   --bg:#070b0f; --panel:#0c1219; --panel2:#0a0f15; --line:#16222c; --line2:#1e2e3a;
   --ink:#9fb2c0; --ink-dim:#5d7180; --ink-bright:#d6e6f2;
-  --grid:#102029; --signal:#ffb000; --trace:#37d27a; --trace2:#36b6c8; --trace3:#c8b65a;
-  --alert:#ff4d57; --good:#37d27a;
+  --signal:#ffb000; --alert:#ff4d57; --good:#37d27a;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
   --sans:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
 }
@@ -49,7 +48,6 @@ main{flex:1; display:grid; grid-template-columns:1fr 312px; gap:1px; background:
 #stage{display:grid; grid-template-rows:minmax(0,1fr); gap:1px; background:var(--line); min-height:0}
 #stageBot{display:grid; grid-template-columns:minmax(0,1fr) 196px; gap:1px; background:var(--line); min-height:0}
 .panel{background:var(--panel); position:relative; min-width:0; min-height:0; display:flex; flex-direction:column}
-.panel.hidden{display:none}
 .cap{
   position:absolute; top:7px; left:9px; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
   color:var(--ink-dim); font-weight:600; z-index:2; pointer-events:none;
@@ -119,11 +117,11 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
   <main>
     <section id="stage">
       <div id="stageBot">
-        <div class="panel" data-layers="1 2 3 all">
-          <div class="cap" id="capTr">traces <span class="sub" id="capTrSub">F, dominance H, tracking error</span></div>
+        <div class="panel">
+          <div class="cap" id="capTr">traces <span class="sub" id="capTrSub">fill F, dominance H, tracking error, horizon</span></div>
           <canvas id="tr"></canvas>
         </div>
-        <div class="panel" data-layers="1 2 3 all" style="padding:24px 12px 12px">
+        <div class="panel" style="padding:24px 12px 12px">
           <div class="cap">readout</div>
           <div class="diag" id="diag"></div>
         </div>
@@ -227,9 +225,11 @@ var CONFIG = {
   H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.25,
   ewsWin:300
 };
-var HEALTHY = {G:1.0, kP:1.0, delta:1.0, phi:1.0, env:0.0, chaos:1.0};
+// slider metadata: healthy resting value (for the band marker) and range, per
+// control that has a slider (G, kP, chaos, env, speed). G/kP are per-level.
+var HEALTHY = {G:1.0, kP:1.0, env:0.0, chaos:1.0};
 var RANGES = {
-  G:[0.05,8.0], kP:[0.02,2.0], delta:[0.05,1.0], phi:[0.0,2.0], env:[-1,1], chaos:[0,4], speed:[0.1,4]
+  G:[0.05,8.0], kP:[0.02,2.0], env:[-1,1], chaos:[0,4], speed:[0.1,4]
 };
 
 function randn(){ // Box-Muller
@@ -265,7 +265,13 @@ function initLevel(P, seed){
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
-function clockRate(k){ return Math.pow(P.clockSlow, (P.levels-1)-k); }
+// Constant per level (clockSlow, levels are fixed), so memoize -- this is on the
+// hot path (called per substep per level).
+var _clockRate=null;
+function clockRate(k){
+  if(!_clockRate){ _clockRate=[]; for(var j=0;j<P.levels;j++) _clockRate.push(Math.pow(P.clockSlow,(P.levels-1)-j)); }
+  return _clockRate[k];
+}
 
 // preallocated scratch (no per-frame alloc in the hot path)
 var _pi=null, _dp=null, _drho=null;
@@ -465,13 +471,12 @@ function drawTraces(cv, buf, P, viewLevel){
   var Fv=buf.F[viewLevel], Hv=buf.H[viewLevel], errV=buf.err[viewLevel];
   var N=Fv.length; if(N<2) return;
   var Fmax=fillAxisMax(P);
-  var hznRaw=buf.hzn[viewLevel], hznMax=P.tau0/clockRate(0)*1.25;   // horizon scale (top baseline is longest)
-  var hznV=new Array(hznRaw.length); for(var hi=0;hi<hznRaw.length;hi++) hznV[hi]=rollAt(hznRaw,hi,10);  // 10-tick rolling avg
+  var hznMax=P.tau0/clockRate(0)*1.25;   // horizon scale (top baseline is longest)
   var series=[
-    {arr:Fv,   lo:0, hi:Fmax,   col:"#37d27a", txt:"fill F"},
-    {arr:Hv,   lo:0, hi:1,      col:"#ffb000", txt:"dominance H"},
-    {arr:errV, lo:0, hi:1.8,    col:"#36b6c8", txt:"tracking error"},
-    {arr:hznV, lo:0, hi:hznMax, col:"#b08cc0", txt:"avg horizon tau"}
+    {arr:Fv,            lo:0, hi:Fmax,   col:"#37d27a", txt:"fill F"},
+    {arr:Hv,            lo:0, hi:1,      col:"#ffb000", txt:"dominance H"},
+    {arr:errV,          lo:0, hi:1.8,    col:"#36b6c8", txt:"tracking error"},
+    {arr:buf.hzn[viewLevel], lo:0, hi:hznMax, col:"#b08cc0", txt:"avg horizon tau", smooth:true}  // 10-tick rolling avg, computed inline (no per-frame alloc)
   ];
   var nB=series.length, gap=11, totalH=h-top-6, bh=(totalH-gap*(nB-1))/nB;
   ctx.font="10px monospace"; ctx.textBaseline="middle";
@@ -485,7 +490,8 @@ function drawTraces(cv, buf, P, viewLevel){
     ctx.strokeStyle=S.col; ctx.lineWidth=1.4; ctx.beginPath();
     var M=S.arr.length, off=M-N;
     for(var i=0;i<N;i++){
-      var v=(S.arr[i+off]-S.lo)/(S.hi-S.lo); v=v<0?0:(v>1?1:v);
+      var raw=S.smooth ? rollAt(S.arr, i+off, 10) : S.arr[i+off];
+      var v=(raw-S.lo)/(S.hi-S.lo); v=v<0?0:(v>1?1:v);
       var x=x0+(x1-x0)*i/(N-1), y=bBot-bh*v;
       if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
@@ -724,7 +730,7 @@ function loop(){
 function warmup(){
   // settle the stack, then pre-fill the scrolling buffers with settled samples,
   // so the trace opens already-settled instead of scrolling a cold-start curve.
-  for(var i=0;i<2400;i++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }   // ~12 model-time settle (dt=0.005)
+  for(var i=0;i<1200;i++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }   // ~6 model-time settle (>4x tau_relax)
   for(i=0;i<BUFLEN;i++) advance();
 }
 setView(0);
