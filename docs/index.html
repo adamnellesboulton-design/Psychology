@@ -193,8 +193,16 @@ var CONFIG = {
   clockSlow:0.82,     // each level up runs this factor slower (timescale separation)
   couple:0.45,        // how strongly a level's fill is disturbed by the level below's
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
-  delta:0.6, phi:1.0,
-  s:0.8, rho0:1.0, rhoMin:0.05,
+  phi:1.0,
+  // The averaging clock is NOT a free global dial in the multi-level stack: each
+  // level's scoring horizon falls out of the clock gradient (tau0, the fastest
+  // level's window, lengthened up the stack by the per-level clock). cw is a
+  // PER-LEVEL coupling-window multiplier, 1.0 = matched to the gradient; ADHD
+  // shortens it on a chosen level so that level tracks too fast to hold a thread.
+  // delta + tauMin/tauMax remain only for the isolated SINGLE-level core, where a
+  // level has no neighbour to couple to and its horizon is genuinely free.
+  tau0:3.6, cw0:1.0,
+  delta:0.6, s:0.8, rho0:1.0, rhoMin:0.05,
   tauMin:0.2, tauMax:6.0, eps:1e-6,
   yR:0.85,            // radius of the moving evidence (reachable when the field concentrates)
   // additions (flagged): environment + noise
@@ -209,9 +217,9 @@ var CONFIG = {
   H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.25,
   ewsWin:300
 };
-var HEALTHY = {G:1.0, kP:1.0, delta:0.6, phi:1.0, env:0.0};
+var HEALTHY = {G:1.0, kP:1.0, delta:1.0, phi:1.0, env:0.0};
 var RANGES = {
-  G:[0.05,8.0], kP:[0.0,2.0], delta:[0.02,1.0], phi:[0.0,2.0], env:[-1,1], speed:[0.1,4]
+  G:[0.05,8.0], kP:[0.0,2.0], delta:[0.05,1.0], phi:[0.0,2.0], env:[-1,1], speed:[0.1,4]
 };
 
 function randn(){ // Box-Muller
@@ -239,11 +247,17 @@ function initLevel(P, seed){
   var n=P.n, p=new Float64Array(n), rho=new Float64Array(n);
   for(var i=0;i<n;i++){ p[i]=1/n; rho[i]=P.rho0; }
   return {p:p, rho:rho, yhat:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
-          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, kP:P.kP};
+          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, kP:P.kP, cw:P.cw0};
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
 function clockRate(k){ return Math.pow(P.clockSlow, (P.levels-1)-k); }
+// the level's EFFECTIVE clock, with its coupling-window setting cw folded in. cw
+// = 1 is the matched gradient; cw < 1 speeds the level up (compresses its
+// separation from the level below) so it reconfigures too fast to hold a thread
+// -- ADHD, located at a level. The scoring horizon (tau0 / effClock) falls out
+// of this same clock, so window and horizon stay tied by construction.
+function effClock(levels, k){ return clockRate(k) / levels[k].cw; }
 
 // preallocated scratch (no per-frame alloc in the hot path)
 var _pi=null, _dp=null, _drho=null;
@@ -254,11 +268,14 @@ function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _d
 // level's clock, so upper levels reconfigure slower.
 function stepDivision(lv, P, y, dt){
   var n=P.n, u=lv.u; ensureScratch(n);
-  // the bar's averaging clock tau (set by delta): one time constant doing two
-  // jobs -- the horizon a level scores evidence over, AND the window it averages
-  // its target across (the world for the top, the level above for the rest).
-  // Short tau chases the noisy instant (ADHD).
-  var tau=P.tauMin+(P.tauMax-P.tauMin)*P.delta;
+  // the bar's averaging clock tau -- the horizon this level scores evidence over
+  // and averages its target across. It is NOT dialed globally: in the stack it
+  // falls out of the clock. dt arrives already scaled by the level's effective
+  // clock (gradient + the per-level cw), so a fixed base window tau0 lengthens up
+  // the stack on its own AND shortens when cw compresses a level (ADHD) -- horizon
+  // and clock stay tied. Only an isolated single level, with no neighbour to
+  // couple to, keeps the free delta horizon.
+  var tau = (P.levels<=1) ? (P.tauMin+(P.tauMax-P.tauMin)*P.delta) : P.tau0;
   lv.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-lv.yhat[0]);
   lv.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-lv.yhat[1]);
   // precision-weighted consensus m, plus a per-tick epistemic wobble (sigmaM):
@@ -322,12 +339,12 @@ function stepFill(lv, P, belowF, dt){
 function stepStack(levels, P, y, dt){
   var L=levels.length, k, sdt;
   for(k=0; k<L; k++){                                  // evidence DOWN: top reads world
-    sdt=dt*clockRate(k);
+    sdt=dt*effClock(levels, k);                        // per-level clock (gradient + cw)
     var target = (k===0) ? y : levels[k-1].m;          // others read the level above
     stepDivision(levels[k], P, target, sdt);
   }
   for(k=L-1; k>=0; k--){                               // supply UP: fill driven from below
-    sdt=dt*clockRate(k);
+    sdt=dt*effClock(levels, k);
     var belowF = (k===L-1) ? null : levels[k+1].F;
     stepFill(levels[k], P, belowF, sdt);
   }
@@ -674,13 +691,14 @@ function slider(host, key, label, sym, fmt, hint){
     +'<div class="track"><div class="healthy" id="hb_'+key+'"></div></div>'
     +(hint?'<div class="hint">'+hint+'</div>':'');
   var inp=el("s_"+key), val=el("v_"+key);
-  // kP is per level (the lesion site): it reads/writes the currently viewed level
-  function cur(){ return key==="speed"?speed : key==="kP"?levels[viewLevel].kP : P[key]; }
+  // kP (the lesion site) and delta (the coupling window) are PER LEVEL: they
+  // read/write the currently viewed level, not a global scalar.
+  function cur(){ return key==="speed"?speed : key==="kP"?levels[viewLevel].kP : key==="delta"?levels[viewLevel].cw : P[key]; }
   inp.value = cur();
   function show(){ val.textContent = fmt(cur()); }
   inp.addEventListener("input", function(){
     var v=parseFloat(inp.value);
-    if(key==="speed") speed=v; else if(key==="kP") levels[viewLevel].kP=v; else P[key]=v;
+    if(key==="speed") speed=v; else if(key==="kP") levels[viewLevel].kP=v; else if(key==="delta") levels[viewLevel].cw=v; else P[key]=v;
     show();
   });
   show();
@@ -694,7 +712,7 @@ function slider(host, key, label, sym, fmt, hint){
 var f2=function(x){return x.toFixed(2);};
 slider(el("ctl-G"),"G","Integrating gain","G",f2,"too high: winner freezes, decouples from y (delusion). too low: winner wanders (disorganized).");
 slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). To 0: the fill loses its damping and swings (the break). Inject at the top -> propagates (bipolar); at the bottom -> contained (ADHD-like). The swing low-passes up the slow stack.");
-slider(el("ctl-delta"),"delta","Averaging clock","d",f2,"the bar's clock: the horizon a level scores evidence over and averages its target across. Too short: chases the instant, never holds a thread (ADHD). Sibling of kP -- the two faults of the one homeostat (clock vs damping).");
+slider(el("ctl-delta"),"delta","Coupling window","d",f2,"PER LEVEL (set on the viewed level). The scoring horizon falls out of the stack's clock gradient; this is that level's coupling window as a fraction of the matched value (1.0 = matched). Shorten it and the level tracks its target too fast to hold a thread (ADHD), located at a level. Sibling of kP -- the two faults of the one homeostat (window vs damping).");
 slider(el("ctl-phi"),"phi","Precision flexibility","phi",f2,"toward 0: precision frozen, slow to re-track after a context shift (autism).");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
@@ -710,6 +728,7 @@ function setView(k){
   Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", +b.dataset.layer===k); });
   el("layerNote").textContent=viewNote(k);
   var kpi=el("s_kP"); if(kpi){ kpi.value=levels[viewLevel].kP; el("v_kP").textContent=f2(levels[viewLevel].kP); }  // kP follows the viewed level
+  var dli=el("s_delta"); if(dli){ dli.value=levels[viewLevel].cw; el("v_delta").textContent=f2(levels[viewLevel].cw); }  // coupling window follows the viewed level
   resizeAll();
 }
 Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setView(+b.dataset.layer); }; });
