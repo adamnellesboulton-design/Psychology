@@ -684,7 +684,8 @@ function drawTraces(cv, buf, P, viewLevel){
     return lastY;
   }
   var Fmax=fillAxisMax(P);
-  var hznV=buf.hzn[viewLevel], hznMax=P.tau0/clockRate(0)*1.25;   // horizon scale (top baseline is the longest)
+  var hznRaw=buf.hzn[viewLevel], hznMax=P.tau0/clockRate(0)*1.25;   // horizon scale (top baseline is longest)
+  var hznV=new Array(hznRaw.length); for(var hi=0;hi<hznRaw.length;hi++) hznV[hi]=rollAt(hznRaw,hi,10);  // 10-tick rolling avg
   // each line, then a label parked at the line's right-hand end, in its colour
   var labels=[];
   labels.push({end:plot(Fv, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
@@ -834,7 +835,7 @@ function advance(){
   // throughput, so its horizon shortens with the oscillation of the level BELOW it
   // (the input its bar averages). An ADHD break at n-1 thus makes the level ONE UP
   // forget faster, while the clock gradient still sets the resting length.
-  for(var kk=0;kk<L;kk++) levels[kk].vol=fillOsc(kk);
+  for(var kk=0;kk<L;kk++) levels[kk].vol=fillVar(kk);   // continuous (variance), not thresholded
   for(kk=0;kk<L;kk++){ var vb=(kk<L-1)?levels[kk+1].vol:0; levels[kk].tau=P.tau0/(1+P.tauVolGain*vb); }
   var steps=Math.max(1,Math.round(P.substeps*speed));   // speed scales throughput, dt stays fixed (stable)
   for(var st=0; st<steps; st++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }
@@ -901,6 +902,13 @@ function fillOsc(k){
   return alt>=3 ? amp : 0;   // repeated swings to both sides = a real oscillation
 }
 function rollMean(arr){ if(!arr.length) return 0; var s=0,n=0; for(var i=Math.max(0,arr.length-120);i<arr.length;i++){ s+=arr[i]; n++; } return s/n; }
+// CONTINUOUS throughput volatility: the variance of a level's fill over a recent
+// window. Unlike fillOsc this is NOT gated/thresholded -- it rises smoothly with
+// oscillation amplitude (and is tiny for healthy noise, since variance squares
+// the deviations), so the horizon it drives moves continuously with severity.
+function fillVar(k, win){ win=win||200; var a=buf.F[k], n=a.length; if(n<8) return 0; var s=Math.max(0,n-win), c=0, m=0, i; for(i=s;i<n;i++){ m+=a[i]; c++; } m/=c; var v=0; for(i=s;i<n;i++){ var d=a[i]-m; v+=d*d; } return v/c; }
+// rolling mean of the last `w` samples of arr, at index i (for smoothing a trace)
+function rollAt(arr, i, w){ var s=Math.max(0,i-w+1), t=0, c=0; for(var j=s;j<=i;j++){ t+=arr[j]; c++; } return t/c; }
 
 function updateDiag(){
   // Headline, read at the TOP (levels[0]) -- the slow, world-facing level that
