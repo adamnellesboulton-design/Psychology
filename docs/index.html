@@ -186,10 +186,19 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 var CONFIG = {
   n:8, dt:0.01, substeps:8, levels:4,   // nested stack depth: level n .. cellular
   eta:2.4, lambda:2.0, c:1.4,
+  lambdaUp:0.5,       // weight on the bottom-up channel (the level below's pick).
+                      // Below lambda so the world-anchored top-down target wins a
+                      // conflict -- a lower channel that cannot be reconciled is
+                      // selected against (the contest above suppresses it).
   clockSlow:0.82,     // each level up runs this factor slower (timescale separation)
   couple:0.45,        // how strongly a level's fill is disturbed by the level below's
   tauSupply:6.0,      // slow window over which a level's setpoint tracks the throughput
                       // of the level below (A.8: the bar is deposited from below)
+  tauVolGain:5.0,     // how much a volatile throughput below shortens the averaging
+                      // window above: a level cannot hold a long average over a fast-
+                      // swinging input, so an oscillation (ADHD) makes the level ONE
+                      // UP forget faster (its horizon drops), while the mood stays
+                      // contained by damping
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
   phi:1.0,
   // The averaging clock is NOT a free global dial in the multi-level stack: each
@@ -251,8 +260,9 @@ function initLevel(P, seed){
   // G (coherence gain) and kP (fill damping) are PER LEVEL -- the two malfunction
   // sites. A lesion is read by its level and depth: G-collapse / kP-break at the
   // top is schizophrenia / bipolar; at n-1 it is autism / ADHD.
-  return {p:p, rho:rho, yhat:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
-          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, Fsupply:P.Fstar};
+  return {p:p, rho:rho, yhat:[0,0], yup:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
+          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, Fsupply:P.Fstar,
+          vol:0, tau:P.tau0};   // vol = own throughput oscillation; tau = emergent horizon
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
@@ -262,21 +272,37 @@ function clockRate(k){ return Math.pow(P.clockSlow, (P.levels-1)-k); }
 var _pi=null, _dp=null, _drho=null;
 function ensureScratch(n){ if(!_pi||_pi.length!==n){ _pi=new Float64Array(n); _dp=new Float64Array(n); _drho=new Float64Array(n);} }
 
-// one division contest at one level, tracking target y (the world for the top
-// level, the level-above's consensus for the rest). dt is already scaled by the
-// level's clock, so upper levels reconfigure slower.
-function stepDivision(lv, P, y, dt){
+// one division contest at one level. The coupling is BIDIRECTIONAL:
+//  - top-down target y: the world (top level) or the level-above's pick (the rest).
+//    This is the prediction/feedback the level tracks (the anchor).
+//  - bottom-up channel belowM: the level-below's winning pick, averaged over the
+//    same window (A.8). The contest is scored against it too, so a lower channel
+//    that cannot be reconciled with the (world-anchored) target is selected
+//    against -- the level above suppresses it. null at the bottom (no level below).
+// dt is already scaled by the level's clock, so upper levels reconfigure slower.
+function stepDivision(lv, P, y, belowM, dt){
   var n=P.n, u=lv.u; ensureScratch(n);
-  // the bar's averaging clock tau -- the horizon this level scores evidence over
-  // and averages its target across. It is NOT dialed globally: in the stack it
-  // falls out of the clock. dt arrives already scaled by the level's effective
-  // clock (gradient + the per-level cw), so a fixed base window tau0 lengthens up
-  // the stack on its own AND shortens when cw compresses a level (ADHD) -- horizon
-  // and clock stay tied. Only an isolated single level, with no neighbour to
-  // couple to, keeps the free delta horizon.
-  var tau = (P.levels<=1) ? (P.tauMin+(P.tauMax-P.tauMin)*P.delta) : P.tau0;
+  // the bar's averaging clock tau -- one timescale doing three jobs: the forward
+  // DISCOUNT rate (A.7), the window this level AVERAGES its input over, and its
+  // SCORING horizon. It is EMERGENT, not dialed: lv.tau is recomputed each frame
+  // from conditions (it shortens when the throughput below is volatile -- you
+  // cannot hold a long average over a fast-swinging input), and it still rides the
+  // clock gradient. Only an isolated single level keeps the free delta horizon.
+  var tau = (P.levels<=1) ? (P.tauMin+(P.tauMax-P.tauMin)*P.delta) : lv.tau;
   lv.yhat[0]+=dt/tau*((y[0]+P.sigmaY*randn())-lv.yhat[0]);
   lv.yhat[1]+=dt/tau*((y[1]+P.sigmaY*randn())-lv.yhat[1]);
+  // the bottom-up channel, averaged over the same window (a level reads the level
+  // below as its output smoothed over tau, A.8). Its weight in the contest is
+  // gated by how consistent it is with the top-down anchor: a channel that
+  // conflicts with the (world-anchored) target is down-weighted toward zero, so a
+  // bad lower output is SUPPRESSED rather than allowed to drag the level off its
+  // anchor. A consistent channel just reinforces the anchor.
+  var upW=0;
+  if(belowM){
+    lv.yup[0]+=dt/tau*(belowM[0]-lv.yup[0]); lv.yup[1]+=dt/tau*(belowM[1]-lv.yup[1]);
+    var du0=lv.yup[0]-lv.yhat[0], du1=lv.yup[1]-lv.yhat[1];
+    upW=Math.exp(-(du0*du0+du1*du1)/(P.s*P.s));
+  }
   // precision-weighted consensus m, plus a per-tick epistemic wobble (sigmaM):
   // the estimate is never perfectly certain (epistemological uncertainty).
   var mx=0,my=0,w=0;
@@ -288,6 +314,9 @@ function stepDivision(lv, P, y, dt){
     var ddm=(u[i][0]-mx)*(u[i][0]-mx)+(u[i][1]-my)*(u[i][1]-my);
     var ddy=(u[i][0]-lv.yhat[0])*(u[i][0]-lv.yhat[0])+(u[i][1]-lv.yhat[1])*(u[i][1]-lv.yhat[1]);
     _pi[i]=-0.5*lv.G*lv.rho[i]*ddm - 0.5*P.lambda*ddy - P.c*lv.p[i] + P.sigmaPi*randn();
+    // bottom-up: also fit the level-below's channel, weighted by upW (its
+    // consistency with the anchor) so a conflicting channel is suppressed
+    if(belowM){ var ddu=(u[i][0]-lv.yup[0])*(u[i][0]-lv.yup[0])+(u[i][1]-lv.yup[1])*(u[i][1]-lv.yup[1]); _pi[i]-=0.5*P.lambdaUp*upW*ddu; }
     pibar+=lv.p[i]*_pi[i];
   }
   for(i=0;i<n;i++){
@@ -360,10 +389,11 @@ function stepFill(lv, P, below, dt){
 // Clocks lengthen upward (bottom fast, top slow) in both passes.
 function stepStack(levels, P, y, dt){
   var L=levels.length, k, sdt;
-  for(k=0; k<L; k++){                                  // evidence DOWN: top reads world
+  for(k=0; k<L; k++){                                  // feedback DOWN, channel UP
     sdt=dt*clockRate(k);                               // per-level clock (gradient)
-    var target = (k===0) ? y : levels[k-1].m;          // others read the level above
-    stepDivision(levels[k], P, target, sdt);
+    var target = (k===0) ? y : levels[k-1].m;          // top-down: world / level above
+    var belowM = (k===L-1) ? null : levels[k+1].m;     // bottom-up: level below's pick
+    stepDivision(levels[k], P, target, belowM, sdt);
   }
   for(k=L-1; k>=0; k--){                               // supply UP: fill driven from below
     sdt=dt*clockRate(k);
@@ -654,11 +684,13 @@ function drawTraces(cv, buf, P, viewLevel){
     return lastY;
   }
   var Fmax=fillAxisMax(P);
+  var hznV=buf.hzn[viewLevel], hznMax=P.tau0/clockRate(0)*1.25;   // horizon scale (top baseline is the longest)
   // each line, then a label parked at the line's right-hand end, in its colour
   var labels=[];
   labels.push({end:plot(Fv, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
   labels.push({end:plot(Hv, 0, 1, "#ffb000"),        col:"#ffb000", txt:"dominance H"});
   labels.push({end:plot(errV, 0, 1.8, "#36b6c8"),    col:"#36b6c8", txt:"tracking error"});
+  labels.push({end:plot(hznV, 0, hznMax, "#b08cc0"), col:"#b08cc0", txt:"avg horizon tau"});
   // label y starts at the line end, then de-overlap vertically (keeps `end` for the connector)
   labels.sort(function(a,b){return a.end-b.end;});
   for(var i=0;i<labels.length;i++){ labels[i].ly = i===0 ? labels[i].end : Math.max(labels[i].end, labels[i-1].ly+13); }
@@ -704,8 +736,8 @@ function evidence(time){
 // F, H and err are all kept per level (so drilling into a level shows its own
 // history). ews drives the classifier off the top level.
 var BUFLEN=4200;
-var buf={F:[], H:[], err:[]};       // F[k], H[k], err[k] are arrays per level
-for(var _b=0;_b<P.levels;_b++){ buf.F.push([]); buf.H.push([]); buf.err.push([]); }
+var buf={F:[], H:[], err:[], hzn:[]};   // F[k], H[k], err[k], hzn[k] per level (hzn = emergent horizon)
+for(var _b=0;_b<P.levels;_b++){ buf.F.push([]); buf.H.push([]); buf.err.push([]); buf.hzn.push([]); }
 var ewsH=[], ewsF=[];               // top-level H and fill F, for the classifier
 var pHist=[], PHIST=120;            // recent share vectors of the VIEWED level (for bar whiskers)
 var bidHist=[], BIDHIST=48;         // recent (p,rho) of every bid in the stack (bid-map density trail)
@@ -796,15 +828,24 @@ el("ch").onclick=function(ev){
 // one model-time advance (a frame's worth): step the whole stack, then record
 // each level's dominance H, tracking error, and its own fill F.
 function advance(){
+  var L=levels.length;
+  // the emergent averaging horizon (= discount rate = scoring window): recomputed
+  // each frame from conditions. A level cannot hold a long average over a volatile
+  // throughput, so its horizon shortens with the oscillation of the level BELOW it
+  // (the input its bar averages). An ADHD break at n-1 thus makes the level ONE UP
+  // forget faster, while the clock gradient still sets the resting length.
+  for(var kk=0;kk<L;kk++) levels[kk].vol=fillOsc(kk);
+  for(kk=0;kk<L;kk++){ var vb=(kk<L-1)?levels[kk+1].vol:0; levels[kk].tau=P.tau0/(1+P.tauVolGain*vb); }
   var steps=Math.max(1,Math.round(P.substeps*speed));   // speed scales throughput, dt stays fixed (stable)
   for(var st=0; st<steps; st++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }
-  var y=evidence(t), L=levels.length;
+  var y=evidence(t);
   for(var k=0;k<L;k++){
     var tg = (k===0) ? y : levels[k-1].m;          // evidence flows down: top reads world
     buf.H[k].push(herfindahl(levels[k].p));
     buf.err[k].push(dist(levels[k].m, tg));
     buf.F[k].push(levels[k].F);
-    if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); buf.F[k].shift(); }
+    buf.hzn[k].push(levels[k].tau/clockRate(k));   // emergent horizon in real model-time
+    if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); buf.F[k].shift(); buf.hzn[k].shift(); }
   }
   // recent share vectors of the viewed level, for the per-bar range whiskers
   pHist.push(Array.prototype.slice.call(levels[viewLevel].p)); if(pHist.length>PHIST) pHist.shift();
