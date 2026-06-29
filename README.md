@@ -1,9 +1,9 @@
 # Allocator — one channel, four controls
 
 A real-time, interactive instrument for one idea: a single self-organising
-control loop, run with four knobs, produces recognisable psychiatric regimes
-when a knob is driven out of range. Turn a control and watch a disorder fall
-out of the dynamics — you can see *why*, not just *that*.
+control loop produces recognisable psychiatric regimes when a control is driven
+out of range. Turn a control and watch a disorder fall out of the dynamics — you
+can see *why*, not just *that*.
 
 This is a sandbox for the mechanics, not a clinical claim. It is a way to feel
 the difference between a **malfunction** (the loop's machinery breaks) and a
@@ -16,73 +16,86 @@ Everything (model, rendering, UI) is one self-contained HTML file.
 ## What you are looking at
 
 One **channel** carries a moving piece of evidence about the world, `y`. A set
-of competing coalitions bid to explain it. Two things evolve:
+of competing coalitions bid to explain it. Two things evolve at every level of
+the stack:
 
 - **Division `p`** — who is winning the channel and how dominant one coalition
-  is (replicator dynamics on a probability simplex). The bar chart shows the
-  coalitions; dominance `H` (the Herfindahl concentration index) is the order
-  parameter.
-- **Fill `F`** — how hard the system is competing overall, held near a target
-  by a PI homeostat. The vertical gauge shows it against its euthymic band.
+  is (replicator dynamics on a probability simplex). Dominance `H` (the
+  Herfindahl concentration index) is the order parameter.
+- **Fill `F`** — how hard the system is competing overall, held near a target by
+  a PI homeostat.
 
-The **channel** view plots the coalition directions `u`, the world `y` (blue),
-and the system's shared state `m` (amber) — its current best guess. Healthy
-means `m` tracks `y`. The estimate carries a small per-tick wobble (`sigmaM`),
-an irreducible epistemic uncertainty: the system is never perfectly sure where
-things stand. The **traces** scroll `F`, `H` and the tracking error,
-and the **readout** prints the order parameters plus rolling early-warning
-signals (lag-1 autocorrelation and variance — the generic precursors of a fold
-or a Hopf bifurcation).
+The display is **just the lines**: four stacked trace graphs for the viewed
+level, each on its own fixed axis —
 
-A **regime label** at the top names the current state: *healthy*, *division
-collapsed*, *fill oscillating*, *fill flooded/starved*, *division scattered*,
-*tracking lost*.
+- **fill `F`** (the homeostat, green),
+- **dominance `H`** (concentration, amber),
+- **tracking error** (how far the system's shared state `m` is from its target,
+  cyan), and
+- **averaging horizon** (the level's emergent clock, violet).
 
-## The four controls
+A **readout** beside them prints the order parameters, the break/freeze
+propagation, and rolling early-warning signals (lag-1 autocorrelation and
+variance — the generic precursors of a fold or a Hopf bifurcation). A **regime
+label** at the top names the current state: *healthy*, *division collapsed*,
+*fill oscillating*, *fill flooded/starved*, *division scattered*, *tracking
+lost*. The estimate `m` carries a small **low-passed** epistemic wobble
+(`sigmaM`, an Ornstein–Uhlenbeck drift): the system is never perfectly sure where
+things stand, and that uncertainty meanders rather than buzzing.
 
-Grouped into the two kinds of fault.
+## The controls
 
-**Malfunctions** — the loop's integrity fails.
+All malfunction controls are **per level** — set on whichever level you have
+drilled into with the layer picker. There are two axes: the **division** axis
+(binding) and the **fill** axis (the homeostat, which has two faults).
 
-| Control | Healthy | Driven out of range |
+**Division — binding gain `G`** (healthy 1.0)
+
+| Driven | Effect |
+|---|---|
+| High @ top | the winner freezes into a self-confirming monopoly, decoupled from the world — the *schizophrenia* collapse. |
+| Low | weak binding: the contest cannot concentrate, many weak coalitions, no integrated whole — the *weak-central-coherence* face of *autism* (and, at the top, "disorganised"). |
+
+**Fill — the one homeostat, two sibling faults** (both healthy 1.0)
+
+| Control | Driven | Effect |
 |---|---|---|
-| **Integrating gain `G`** | 1.0 | High → the winner freezes and decouples from the world (delusional fixity, the *schizophrenia* collapse). Low → the winner wanders (disorganised). |
-| **Homeostat damping `kP`** | 1.0 | → 0 the fill loses its damping and swings between flood and starvation (the *bipolar* limit cycle). |
+| **Damping `kP`** | → its floor | the fill loses its damping and swings in a bounded limit cycle — *bipolar* at the top; contained lower down. (The floor is a small positive value: exactly 0 is undamped and blows up rather than settling.) |
+| **Averaging clock `tauW`** | short @ n-1 | the level forgets fast, the fill hugs its setpoint with fast, decorrelated jitter — *ADHD*. Its fingerprint is the **opposite** of bipolar's: variance **down**, autocorrelation **down**, no rhythmic peak. The fast jitter is low-passed by the slower levels above, so it stays **contained** (the headline reads healthy; it lives in the traces). |
 
-**Miscalibrations** — the machinery is intact, the dial is wrong.
+Plus the **environment** (see below). The two malfunctions on the fill axis are
+siblings on one homeostat: `kP` is its damping, `tauW` is its averaging clock.
+They cross-dissociate cleanly — bipolar drives fill variance up / correlated /
+into a slow swing; ADHD drives it down / decorrelated / broadband.
 
-| Control | Healthy | Driven out of range |
-|---|---|---|
-| **Averaging clock `δ`** | 0.6 | The bar's clock — the horizon a level scores evidence over and averages its target across. Too short → chases the instant, never holds a thread (*ADHD*). Sibling of `kP`: the two faults of the one homeostat (clock vs damping). |
-| **Precision flexibility `φ`** | 1.0 | → 0 precision freezes; the system is slow to re-weight after a context shift (*autism*). |
+### A note on autism (an honest, two-part claim)
 
-The two malfunctions produce **gross, named state changes** you can read off the
-label (collapse, oscillation). The two miscalibrations are **subtler by
-design** — they change *how* the system tracks (it churns, or it is rigid after
-a shift) rather than throwing it into a collapsed state. That is clinically
-honest: ADHD and autism are not states of gross system failure. Watch them in
-the live division view, the traces and the early-warning numbers, and use
-**context shift (jump y)** to provoke the autism rigidity.
+The instrument captures autism's **weak-central-coherence** face — it is low /
+context-frozen binding on the `G` axis, a real-time deficit of integration. It
+deliberately does **not** reduce autism's **insistence-on-sameness / rigidity**
+face to the same control, and that is a *result*, not a gap: the model's winner
+always tracks the world through an unconditional world-coupling term, so no
+binding lesion can make it fail to update. The model therefore predicts that
+autism's two faces are **structurally distinct mechanisms** — weak central
+coherence a deficit of integration (this fast contest), insistence on sameness a
+gating of world-coupling that plausibly lives at a slower, learned,
+developmental-basin level — which co-occur in a person because both are affected,
+not because they are one thing. (A separate "precision flexibility" control was
+tested and found not to be separable from `G`; it is not on the board.)
 
-## Feast and famine
+## Environment: chaos and feast/famine
 
-The **environment** control is the reproductive tilt on enrolment — whether a
-level's population (its fill, the count competing for the channel) tilts toward
-growing or shrinking. It is proportional (it scales with the population already
-enrolled) and applies per level:
-
-- **feast (+)** — enrolment tilts toward increase; each level's population grows
-  and the system floods.
-- **famine (−)** — enrolment tilts toward decrease; the population shrinks and
-  the system starves.
-- **neutral (0)** — no tilt; the homeostat's own target holds.
-
-A small amount of randomness rides on the fill at all times (an always-on
-environmental wobble), so the system is never perfectly quiet.
-
-**Mood** reads as the fill level along this axis: toward feast is elevated
-(manic), toward famine is low (depressed). The bipolar limit cycle is exactly
-this level swinging between the two poles.
+- **Chaos** is the environment's **volatility** — a global multiplier on the
+  always-on external noise (on the fill and on the world reading). 1× is the
+  calibrated baseline; turn it up to stress a regime's stability. (The system is
+  strongly homeostatic: chaos roughens the traces and stresses a lesioned level
+  far more than a healthy one.)
+- **Feast / famine `env`** is the reproductive **tilt** on that environment —
+  the surplus/deficit the noisy environment leans toward. It applies per level
+  and is proportional to the population already enrolled. **Mood** reads as the
+  fill level along this axis: feast (+) lifts it (manic), famine (−) lowers it
+  (depressed), 0 is neutral. The bipolar limit cycle is exactly this level
+  swinging between the two poles.
 
 ## Layers (the nested stack)
 
@@ -91,34 +104,31 @@ per scale: level _n_ at the top, then _n−1_, down to the **cellular** nucleus 
 the bottom. The two flows cross in **opposite directions**. Evidence/feedback
 flows **down**: only the **top** reads the external world, and its pick `m`
 propagates down as the target every level below tracks. Supply/throughput rises
-**up**: each level's fill `F` is disturbed by the fill of the level below it, so
-a break travels upward. **Clocks lengthen upward** — the bottom is fast and
-local (a quick end-effector), the top is slow, global (mood), and world-facing.
-Each level has its **own fill** with its own damping `kP`.
+**up**: each level's fill `F` is disturbed (through a one-pole low-pass read) by
+the fill of the level below it, so a break travels upward. **Clocks lengthen
+upward** — the bottom is fast and local (a quick end-effector), the top is slow,
+global (mood), and world-facing. Each level carries its **own** division and
+fill, with its own `G`, `kP` and `tauW`.
 
-The layer picker (level n / n−1 / n−2 / cellular) drills the panels into any
-level; `kP` is set on whichever level you're viewing.
+The layer picker (level n / n−1 / n−2 / cellular) drills the traces into any
+level; the per-level controls are set on whichever level you are viewing.
 
 ### Bipolar as propagating severity
 
-Bipolar and ADHD are the two faults of the one fill homeostat — **`kP` is its
-damping, `delta` is its averaging clock** — siblings, not the same break. The
-multi-level stack adds a **severity** axis to *bipolar*: drop a level's fill
-damping (`kP → 0`) and watch how far it spreads.
+The multi-level stack adds a **severity** axis to *bipolar*: drop a level's fill
+damping (`kP →` its floor) and watch how far it spreads.
 
-- **At the bottom, levels above intact** → the slower, well-damped upper levels
-  low-pass the fast oscillation and absorb it. **Contained**: local, never
-  reaches the top. The headline stays healthy; drill to the bottom to see it
-  swing.
+- **Lower down, levels above intact** → the slower, well-damped upper levels
+  low-pass the oscillation and absorb it. **Contained**: local, the headline
+  stays healthy; drill down to see it swing.
 - **At the top** (or low with the upper levels also weakened) → it reaches the
   slow global level: a full, slow mood swing. **Propagated**: the headline reads
   *fill oscillating* (full bipolar).
 
-Same Hopf, contained or propagated by depth. The **break depth** readout (how
-many levels are oscillating) is the quantitative form of severity. This is one
-disorder at different severities, *not* bipolar-vs-ADHD. ADHD stays the clock
-fault (`delta` short); the division pair (schizophrenia/autism) is separate,
-read at the top, where the contest faces the world.
+Same Hopf, contained or propagated by depth — one disorder at different
+severities, *not* bipolar-vs-ADHD. ADHD is the clock fault (`tauW` short), a
+distinct fingerprint (variance down, not up); schizophrenia/autism are the
+division axis (`G`), read where the contest faces the world.
 
 ## Notes
 
@@ -128,4 +138,7 @@ read at the top, where the contest faces the world.
   the top of the script, so the dynamics are easy to retune in one place.
 - `docs/` is what GitHub Pages publishes (see `.github/workflows/pages.yml`).
   The root `index.html` just redirects into it.
+- `CLAUDE.md` is the model's working notebook — the per-control mechanics, the
+  A-vs-B discrimination protocol, the healthy-control calibration, and the
+  recorded results (including what the model refused to capture, and why).
 </content>
