@@ -184,7 +184,10 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 // always-on noise. Everything else is the spec's reference step.)
 // ===========================================================================
 var CONFIG = {
-  n:8, dt:0.01, substeps:8, levels:4,   // nested stack depth: level n .. cellular
+  n:8, dt:0.005, substeps:16, levels:4, // nested stack depth: level n .. cellular
+                                        // dt halved (+ substeps doubled to keep the
+                                        // wall-clock pace) so the kP->0 limit cycle is
+                                        // resolved -- its frequency matches sqrt(kI*Fstar)
   eta:2.4, lambda:2.0, c:1.4,
   lambdaUp:0.5,       // weight on the bottom-up channel (the level below's pick).
                       // Below lambda so the world-anchored top-down target wins a
@@ -200,6 +203,11 @@ var CONFIG = {
                       // UP forget faster (its horizon drops), while the mood stays
                       // contained by damping
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
+  leak:0.06,          // partial containment: even a healthy level relays this
+                      // fraction of the disturbance from below, so a contained
+                      // lesion leaves an ATTENUATED fingerprint upstairs (an
+                      // attenuated peak for A, attenuated broadband for B) instead
+                      // of being fully erased -- without tripping the headline.
   phi:1.0,
   // The averaging clock is NOT a free global dial in the multi-level stack: each
   // level's scoring horizon falls out of the clock gradient (tau0, the fastest
@@ -367,7 +375,11 @@ function stepFill(lv, P, below, dt){
   // up only through levels that are themselves weak. Containment is thus a
   // property of kP, the same dial as the break. The disturbance is the level
   // below's fast deviation from its OWN setpoint (its oscillation).
-  var gate = Math.max(0, Math.min(1, 1 - lv.kP/P.kP));
+  // gate = how much of the disturbance below this level relays up. A weakened
+  // level (kP->0) passes it on (gate->1); a healthy level mostly absorbs it but
+  // leaks a floor `leak`, so a contained break still attenuates upward rather than
+  // vanishing -- enough to read in the top's spectrum, not enough to trip it.
+  var gate = P.leak + (1-P.leak)*Math.max(0, Math.min(1, 1 - lv.kP/P.kP));
   var disturb = (below===null) ? 0 : P.couple*(below.F - below.Fset)*gate;
   var dF=lv.F*(P.a*lv.pibar - theta + P.sigmaF*randn() + disturb);
   lv.F=Math.max(0, lv.F + dt*dF);
@@ -985,7 +997,7 @@ function loop(){
 function warmup(){
   // settle the stack, then pre-fill the scrolling buffers with settled samples,
   // so the trace opens already-settled instead of scrolling a cold-start curve.
-  for(var i=0;i<1200;i++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }
+  for(var i=0;i<2400;i++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }   // ~12 model-time settle (dt=0.005)
   for(i=0;i<BUFLEN;i++) advance();
 }
 setView(0);
