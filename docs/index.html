@@ -560,8 +560,15 @@ function drawDivision(cv, lv){
   ctx.strokeStyle="#16222c"; ctx.setLineDash([3,3]);
   var y1n=base+H*(1-1/n); ctx.beginPath(); ctx.moveTo(pad,y1n); ctx.lineTo(w-pad,y1n); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle="#5d7180"; ctx.font="9px monospace"; ctx.textAlign="right"; ctx.fillText("even split (1/n)", w-pad-2, y1n-3); ctx.textAlign="left";
-  // selection highlight: a faint full-height column behind the selected bar
-  if(sel>=0 && sel<n){ ctx.fillStyle="rgba(214,230,242,.07)"; ctx.fillRect(pad+sel*bw, base, bw, H); }
+  // selection highlight: a faint full-height column behind the selected bar,
+  // marking the coalition currently pinned open in the clock + readout. Labelled
+  // so it does not read as a mystery bar.
+  if(sel>=0 && sel<n){
+    ctx.fillStyle="rgba(214,230,242,.07)"; ctx.fillRect(pad+sel*bw, base, bw, H);
+    ctx.fillStyle="rgba(214,230,242,.55)"; ctx.font="9px monospace"; ctx.textAlign="center";
+    ctx.fillText("inspecting", pad+sel*bw+bw/2, base+9);
+    ctx.textAlign="left";
+  }
   // one bar per option; height = its share (the "range of wins"). Leader uses
   // the clock's leader colour so the two views read as the same options.
   for(i=0;i<n;i++){
