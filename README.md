@@ -43,30 +43,34 @@ lost*. The estimate `m` carries a small **low-passed** epistemic wobble
 (`sigmaM`, an Ornstein–Uhlenbeck drift): the system is never perfectly sure where
 things stand, and that uncertainty meanders rather than buzzing.
 
-## The controls
+## The four controls
 
-All malfunction controls are **per level** — set on whichever level you have
-drilled into with the layer picker. There are two axes: the **division** axis
-(binding) and the **fill** axis (the homeostat, which has two faults).
+All four disorders are breaks of the **top** (world-facing) contest — **two
+axes, each broken two ways**. There is no "deeper" disorder hidden in the stack;
+the controls are set on the top. The gross/subtle split lives *within* each axis:
+the violent break trips a named state, the milder break is **trace-level** (the
+headline still reads "healthy", but the fingerprint is plain in the lines).
 
 **Division — binding gain `G`** (healthy 1.0)
 
 | Driven | Effect |
 |---|---|
-| High @ top | the winner freezes into a self-confirming monopoly, decoupled from the world — the *schizophrenia* collapse. |
-| Low | weak binding: the contest cannot concentrate, many weak coalitions, no integrated whole — the *weak-central-coherence* face of *autism* (and, at the top, "disorganised"). |
+| **High** | the winner freezes into a self-confirming monopoly, decoupled from the world — the *schizophrenia* collapse (gross). |
+| **Low** | weak binding: the contest cannot concentrate, many weak coalitions, no integrated whole — *autism*'s **weak central coherence** (trace-level: dominance `H` sags and churns; faint under clear input, pronounced under an *ambiguous* field, which is precisely when binding is needed). |
 
 **Fill — the one homeostat, two sibling faults** (both healthy 1.0)
 
 | Control | Driven | Effect |
 |---|---|---|
-| **Damping `kP`** | → its floor | the fill loses its damping and swings in a bounded limit cycle — *bipolar* at the top; contained lower down. (The floor is a small positive value: exactly 0 is undamped and blows up rather than settling.) |
-| **Averaging clock `tauW`** | short @ n-1 | the level forgets fast, the fill hugs its setpoint with fast, decorrelated jitter — *ADHD*. Its fingerprint is the **opposite** of bipolar's: variance **down**, autocorrelation **down**, no rhythmic peak. The fast jitter is low-passed by the slower levels above, so it stays **contained** (the headline reads healthy; it lives in the traces). |
+| **Damping `kP`** | → its floor | the fill loses its damping and swings in a bounded limit cycle — *bipolar* (gross). (The floor is a small positive value: exactly 0 is undamped and blows up rather than settling.) |
+| **Averaging clock `tauW`** | short | the level forgets fast, the fill hugs its setpoint with fast, decorrelated jitter — *ADHD* (trace-level). Its fingerprint is the **opposite** of bipolar's: variance **down** (~35×), autocorrelation **down**, no rhythmic peak. With a strong winner it holds (hyperfocus); with a weak/ambiguous one it can't keep a thread (scatter) — the two faces of one short clock. |
 
-Plus the **environment** (see below). The two malfunctions on the fill axis are
-siblings on one homeostat: `kP` is its damping, `tauW` is its averaging clock.
-They cross-dissociate cleanly — bipolar drives fill variance up / correlated /
-into a slow swing; ADHD drives it down / decorrelated / broadband.
+Plus the **environment** (see below). The two fill faults are siblings on one
+homeostat: `kP` is its damping, `tauW` its averaging clock. They cross-dissociate
+cleanly — bipolar drives fill variance up / correlated / into a slow swing; ADHD
+drives it down / decorrelated / broadband. The division axis is `G` alone (high
+vs low); there is no separate "precision flexibility" control (it was tested and
+found not to be separable from `G`).
 
 ### A note on autism (an honest, two-part claim)
 
@@ -113,22 +117,14 @@ fill, with its own `G`, `kP` and `tauW`.
 The layer picker (level n / n−1 / n−2 / cellular) drills the traces into any
 level; the per-level controls are set on whichever level you are viewing.
 
-### Bipolar as propagating severity
-
-The multi-level stack adds a **severity** axis to *bipolar*: drop a level's fill
-damping (`kP →` its floor) and watch how far it spreads.
-
-- **Lower down, levels above intact** → the slower, well-damped upper levels
-  low-pass the oscillation and absorb it. **Contained**: local, the headline
-  stays healthy; drill down to see it swing.
-- **At the top** (or low with the upper levels also weakened) → it reaches the
-  slow global level: a full, slow mood swing. **Propagated**: the headline reads
-  *fill oscillating* (full bipolar).
-
-Same Hopf, contained or propagated by depth — one disorder at different
-severities, *not* bipolar-vs-ADHD. ADHD is the clock fault (`tauW` short), a
-distinct fingerprint (variance down, not up); schizophrenia/autism are the
-division axis (`G`), read where the contest faces the world.
+The disorders themselves are breaks of the **top** — the world-facing level
+where the contest meets the world. The stack is the architecture, not a place
+where disorders hide: a lesion injected *below* the top is **contained** — the
+slower, well-damped upper levels low-pass it, so by the top it has washed out
+(drill down to see it swing locally). A lower lesion is therefore a *contained*
+version of a top break, not a separate or deeper disorder. (This retires an
+earlier "depth = severity" framing: the disorders live at the top, and the depth
+axis only buys containment.)
 
 ## Notes
 

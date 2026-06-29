@@ -47,33 +47,34 @@ of the script. Retune there; nothing is hard-coded elsewhere.
   bipolar (damping) and ADHD (clock) are the two faults of the one fill homeostat
   (siblings, not the same break).
 
-### The board controls → regimes (current, as built)
+### The board controls → regimes (the new regime: all four at the TOP)
 
-Per-level malfunction sites (set on the viewed level), plus the environment.
-This SUPERSEDES the earlier `delta`/`phi` framing of the two trait controls —
-see "What today's implementation established" below for why.
+**All four disorders are breaks of the world-facing top contest** — two axes,
+each broken two ways. They are NOT depth-located (the earlier "trait disorders
+live at n-1, contained" framing is RETIRED: emergence from the ground is ruled
+out — see findings). The four are per-level controls set on the top. The
+gross/subtle split lives WITHIN each axis: the violent break trips a gross label,
+the milder break is trace-level (reads "healthy" on the headline, plain in the
+lines).
 
-| Control | Axis | Out-of-range regime |
-|---|---|---|
-| `G` coherence gain | division (binding) | high @ top → division collapses, frozen monopoly (schizophrenia); low → weak binding, poor concentration (autism's weak-central-coherence face; also "disorganised") |
-| `kP` homeostat damping | fill (damping) | → floor → fill oscillates, bounded limit cycle (bipolar @ top); the floor is small-positive (exactly 0 is undamped and blows up) |
-| `tauW` averaging clock | fill (clock) | short @ n-1 → forgets fast, fill hugs setpoint, fast decorrelated jitter (ADHD); variance DOWN, ac1 DOWN — the B fingerprint, opposite of `kP` |
+| Axis | Control | High / hard break | Low / mild break |
+|---|---|---|---|
+| **Division** (binding) | `G` coherence gain | high → division collapses, frozen monopoly = **schizophrenia** (gross) | low → weak binding, H sags / churns = **autism**, weak central coherence (trace-level; sharpens under ambiguous input) |
+| **Fill** (the one homeostat, two sibling faults) | `kP` damping / `tauW` clock | `kP` → floor → fill oscillates, limit cycle = **bipolar** (gross) | `tauW` short → fill hugs setpoint, fast decorrelated jitter = **ADHD** (trace-level: variance DOWN, ac1 DOWN — the B fingerprint, opposite of bipolar) |
+
+Both trace-level fingerprints are readable AT the top when applied at the top:
+ADHD's flat fill (variance ~35x down) unconditionally; autism's H-sag faintly
+under clear input, pronounced under ambiguous (H 0.38→0.26). (`kP` floor is
+small-positive: exactly 0 is undamped and blows up.)
 
 Plus the environment: `chaos` scales the external noise (volatility); `env` is
 the feast/famine tilt on it (`env` > 0 floods/manic, `env` < 0 starves/depressed).
 
-The fill pair (one homeostat, two faults — siblings): `kP` is its **damping**,
-`tauW` is its **averaging clock**. Bipolar is the damping break, ADHD is the
-short clock. They cross-dissociate (A-vs-B protocol below): bipolar drives fill
-variance UP / correlated / into a slow limit cycle; ADHD drives it DOWN /
-decorrelated / broadband. The multi-level recursion section is a **bipolar-only**
-severity demonstration (the `kP` break propagating up, contained vs propagated);
-it is NOT the ADHD mechanism.
-
-The division pair is `G` (binding level) — and that is the WHOLE division axis:
-there is no separate precision-flexibility control (see findings). `delta`,
-`tauMin`, `tauMax`, `phi` survive only in the isolated single-level core
-(`P.levels <= 1`), which the built model never runs; they are not board controls.
+The fill pair are siblings on one homeostat: `kP` is its **damping**, `tauW` its
+**averaging clock**; they cross-dissociate (A-vs-B protocol below). The division
+pair is `G` alone (high vs low) — there is no separate precision-flexibility
+control (findings). `delta`, `tauMin`, `tauMax`, `phi` survive only in the
+isolated single-level core (`P.levels <= 1`), never run; not board controls.
 
 ### Classifier
 
@@ -83,10 +84,12 @@ tracking lost (`err` > `errLost`) → flooded/starved (`|F − Fstar|` > `band`)
 healthy. Diagnostics are **windowed means/amplitudes**, not instantaneous values
 — the instantaneous signals are noisy enough to make a label flicker.
 
-Known and intended: the two malfunctions produce clean, named state labels; the
-two miscalibrations (ADHD, autism) and low-`G` disorganised are subtle and read
-as "healthy" on the gross label by design — they live in the division view,
-traces and EWS numbers, not in a collapsed state. Do not fake a label for them.
+Known and intended: the hard breaks (schizophrenia's collapse, bipolar's
+oscillation) produce clean named labels; the mild breaks on the same two axes
+(autism = low `G`, ADHD = short `tauW`) are trace-level and read as "healthy" on
+the gross label by design — they live in the trace lines and the fingerprints
+(autism: H sag/churn; ADHD: fill variance DOWN / decorrelated), not in a
+collapsed state. Do not fake a label for them.
 
 In the built multi-level model the classifier reads the parts that matter for
 each regime: division (collapse/scatter/tracking) at the fast bottom nucleus
@@ -199,14 +202,27 @@ basin (or an unbuilt gateable-world-fit), two levels, not one control.
    probe, never H-pinned-high alone; basin depth must EMERGE from the stamp, not
    be hand-set.
 
-## The recursive stack (multi-level): bipolar as propagating severity
+## The recursive stack (multi-level): architecture + containment
+
+> **REFRAME (the new regime).** The disorders are no longer located by depth.
+> All four are breaks of the **top** contest (the two-axis table above):
+> emergence-from-the-ground is ruled out, so nothing "lives in the basement."
+> What the stack still earns: (1) it is the genuine **architecture** (one contest
+> at each scale, evidence down / supply up, clocks lengthening upward — get the
+> coupling exact, below); and (2) **containment** — a lesion injected *below* the
+> world-facing top is absorbed (autism and ADHD applied at n-1 wash out by the
+> top; their fingerprints appear only where the level reads the world directly).
+> So a lower lesion is a *contained* version of a top lesion, not a different or
+> deeper disorder. The old "bipolar as propagating severity / depth = severity"
+> reading and "ADHD vs depth" wording below are **SUPERSEDED** by this; keep the
+> coupling spec, read the severity/depth claims as containment only.
 
 This wraps the single-level core above; it replaces none of it. The same contest
-runs at several levels (`n`, `n-1`, `n-2`, bottom). It is a **bipolar-only**
-demonstration: the damping break (`kP -> 0`) injected at a level either stays
-contained or propagates up the stack — a *severity* axis. This is NOT the ADHD
-mechanism. ADHD is the bar's clock fault (`delta` short) and is not reframed by
-depth.
+runs at several levels (`n`, `n-1`, `n-2`, bottom). The damping break (`kP -> 0`)
+injected *below* the top either stays contained or, only if the intervening
+levels are also weak, reaches the top — read this as **containment**, not a
+severity axis that relocates the disorder. The disorders themselves are set at
+the top.
 
 ### Coupling the levels (this is the architecture; get it exact)
 Run the identical `step()` core at each level `N`. Not independent stacked
