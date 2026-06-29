@@ -168,6 +168,31 @@ suite as a gate, as the first thing in a session, never the last. Until then the
 honest statement is: weak coherence = the contest; insistence on sameness = the
 basin (or an unbuilt gateable-world-fit), two levels, not one control.
 
+### Next-session queue (do cold and fresh, in this order)
+1. **ADHD behavioral test (scatter vs hyperfocus).** Ready, decoupled, needs no
+   new machinery: with short `tauW @ n-1`, vary the leading coalition's strength
+   -- no dominant winner -> rapid turnover (scatter/inattention); one strong
+   immediate winner -> it keeps re-winning (hyperfocus). If both fall out of the
+   one short clock, scatter and hyperfocus are one mechanism (they should come
+   paired in a carrier). This one can run now on the current build.
+2. **Autism unification test (the canalization chain) -- BLOCKED, needs a build
+   first.** The four-link test (weak binding penalizes NOVELTY not just
+   ambiguity -> the stamp fires less on novelty -> standing canalizes routine
+   basins -> deep basins fail the reweighting probe) would decide whether autism
+   is one root (weak binding) with two faces at two timescales: fast weak
+   coherence + slow stamp-driven sameness. BUT it relies on standing/stamp/
+   canalization dynamics (`Edot/E = r*q - mu`, the salience-stamp, emergent
+   basins) that are **NOT in this build** -- grep finds none; the replaced
+   `allocator_toy.py` never had them; they are the paper's "part two coalition
+   layer," conceptual not coded. So this is NOT a no-risk measurement: it first
+   needs the canalization layer ported into the instrument. Guards when built:
+   keep NOVELTY distinct from AMBIGUITY (Link 1, the fragile one); confirm the
+   fast wall still stands (with standing frozen, a binding lesion must STILL fail
+   to produce rigidity -- if the fast contest fakes rigidity, the reward coupling
+   leaked across the level separation); rigidity = lock-AND-fail-the-reweighting-
+   probe, never H-pinned-high alone; basin depth must EMERGE from the stamp, not
+   be hand-set.
+
 ## The recursive stack (multi-level): bipolar as propagating severity
 
 This wraps the single-level core above; it replaces none of it. The same contest
