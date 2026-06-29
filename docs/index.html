@@ -322,24 +322,27 @@ function stepDivision(lv, P, y, dt){
 // propagates UP the stack. lv.kP is the local damping; at kP->0 the homeostat
 // loses its damping and Hopf-oscillates (the break). A slow, well-damped upper
 // level low-passes a fast disturbance from below (containment).
-function stepFill(lv, P, belowF, dt){
-  // the bar is deposited from below (A.8): the setpoint a level defends is not a
-  // free constant but the SUSTAINED throughput of the level below, tracked slowly
-  // over tauSupply. The bottom (no level below) rests on the metabolic substrate
-  // Fstar, which is where feast/famine enters; it then propagates up the supply
-  // chain. The fast deviation of the level below from this slow setpoint is the
-  // disturbance that carries a break upward (gated by kP, below).
-  if(belowF===null){ lv.Fsupply = P.Fstar*(1+P.envGain*P.env); }     // bottom: substrate + env
-  else { lv.Fsupply += dt*(belowF - lv.Fsupply)/P.tauSupply; }       // slow track of below's output
-  var Fset=lv.Fsupply;
+function stepFill(lv, P, below, dt){
+  // the bar is deposited from below (A.8): the ENV-FREE baseline a level defends
+  // is the sustained supply of the level beneath it, tracked slowly over
+  // tauSupply (the bottom rests on the metabolic substrate Fstar). Tracking the
+  // env-free supply -- not the env-shifted fill -- keeps the feast/famine shift
+  // from compounding up the stack.
+  if(below===null){ lv.Fsupply = P.Fstar; }                          // bottom: substrate baseline
+  else { lv.Fsupply += dt*(below.Fsupply - lv.Fsupply)/P.tauSupply; } // slow track of below's supply
+  // feast/famine is applied PER LEVEL, as a multiplicative shift on that baseline,
+  // so its size scales with the level's own fill volume: a level holding more
+  // volume feels a proportionally larger surplus (feast) or deficit (famine).
+  var Fset=lv.Fsupply*(1+P.envGain*P.env);
   var theta=P.theta0 + lv.kP*(lv.F-Fset) + P.kI*lv.z;
   // a level RELAYS the disturbance from below in proportion to how undamped it
   // is: a healthy (well-damped) level absorbs it (gate ~0) so a break below is
   // contained; a weakened level (kP -> 0) passes it on, so the break propagates
   // up only through levels that are themselves weak. Containment is thus a
-  // property of kP, the same dial as the break.
+  // property of kP, the same dial as the break. The disturbance is the level
+  // below's fast deviation from its OWN setpoint (its oscillation).
   var gate = Math.max(0, Math.min(1, 1 - lv.kP/P.kP));
-  var disturb = (belowF===null) ? 0 : P.couple*(belowF - Fset)*gate;
+  var disturb = (below===null) ? 0 : P.couple*(below.F - below.Fset)*gate;
   var dF=lv.F*(P.a*lv.pibar - theta + P.sigmaF*randn() + disturb);
   lv.F=Math.max(0, lv.F + dt*dF);
   lv.z=Math.max(-P.zClamp, Math.min(P.zClamp, lv.z + dt*(lv.F-Fset)));   // anti-windup
@@ -367,8 +370,8 @@ function stepStack(levels, P, y, dt){
   }
   for(k=L-1; k>=0; k--){                               // supply UP: fill driven from below
     sdt=dt*effClock(levels, k);
-    var belowF = (k===L-1) ? null : levels[k+1].F;
-    stepFill(levels[k], P, belowF, sdt);
+    var below = (k===L-1) ? null : levels[k+1];
+    stepFill(levels[k], P, below, sdt);
   }
 }
 
