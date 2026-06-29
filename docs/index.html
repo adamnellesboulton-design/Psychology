@@ -605,7 +605,7 @@ function drawDivision(cv, lv){
   ctx.fillText("bar = share now | whisker = its recent range | click to inspect", 10, h-4);
 }
 
-function drawFill(cv, s, P){   // s = the organism fill {F, Fset}
+function drawFill(cv, s, P){   // s = the viewed level's state (its own fill {F, Fset})
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;
   var pad=24, top=24, bot=h-16, gx=w/2;
@@ -637,8 +637,8 @@ function drawFill(cv, s, P){   // s = the organism fill {F, Fset}
   ctx.textAlign="left";
 }
 
-// scrolling traces for the viewed level (dominance H, tracking error) + the
-// organism fill F (shared across all levels)
+// scrolling traces for the viewed level: its dominance H, tracking error, and
+// its own fill F (each level has its own fill)
 function drawTraces(cv, buf, P, viewLevel){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;
@@ -708,8 +708,8 @@ function evidence(time){
 
 // rolling buffers. A long trace history so a regime has room to play out
 // (several bipolar cycles, the slow evidence wander) before it scrolls off.
-// H and err are kept per level (so drilling into a level shows its own history);
-// F is the single organism fill. ews drives the classifier off the top level.
+// F, H and err are all kept per level (so drilling into a level shows its own
+// history). ews drives the classifier off the top level.
 var BUFLEN=4200;
 var buf={F:[], H:[], err:[]};       // F[k], H[k], err[k] are arrays per level
 for(var _b=0;_b<P.levels;_b++){ buf.F.push([]); buf.H.push([]); buf.err.push([]); }
@@ -802,7 +802,7 @@ el("ch").onclick=function(ev){
 };
 
 // one model-time advance (a frame's worth): step the whole stack, then record
-// per-level dominance H and tracking error plus the organism fill F.
+// each level's dominance H, tracking error, and its own fill F.
 function advance(){
   var steps=Math.max(1,Math.round(P.substeps*speed));   // speed scales throughput, dt stays fixed (stable)
   for(var st=0; st<steps; st++){ t+=P.dt; stepStack(levels, P, evidence(t), P.dt); }
@@ -841,7 +841,6 @@ function breakReach(){
   return lesion;
 }
 
-function rollAmp(arr, win){ win=win||120; if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-win);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
 // fill OSCILLATION at level k over a long window (slow upper swings need it):
 // amplitude gated by large ALTERNATIONS across a band, so neither a one-time
 // ramp (a flood settling, a control change -> one-sided, no alternation) nor
