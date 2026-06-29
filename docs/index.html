@@ -261,8 +261,8 @@ function initLevel(P, seed){
   // sites. A lesion is read by its level and depth: G-collapse / kP-break at the
   // top is schizophrenia / bipolar; at n-1 it is autism / ADHD.
   return {p:p, rho:rho, yhat:[0,0], yup:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
-          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, Fsupply:P.Fstar,
-          vol:0, tau:P.tau0};   // vol = own throughput oscillation; tau = emergent horizon
+          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, clk:1, Fsupply:P.Fstar,
+          vol:0, tau:P.tau0};   // clk = per-level clock factor (B); vol/tau = emergent horizon
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
@@ -389,14 +389,18 @@ function stepFill(lv, P, below, dt){
 // Clocks lengthen upward (bottom fast, top slow) in both passes.
 function stepStack(levels, P, y, dt){
   var L=levels.length, k, sdt;
+  // each level's clock = the stack gradient times its per-level factor clk. clk>1
+  // runs the WHOLE level faster (shorter memory across reconfiguration AND
+  // smoothing) -- the "short clock" sibling (Mechanism B), distinct from the kP
+  // damping break (Mechanism A). clk=1 is healthy.
   for(k=0; k<L; k++){                                  // feedback DOWN, channel UP
-    sdt=dt*clockRate(k);                               // per-level clock (gradient)
+    sdt=dt*clockRate(k)*levels[k].clk;                 // per-level clock (gradient x clk)
     var target = (k===0) ? y : levels[k-1].m;          // top-down: world / level above
     var belowM = (k===L-1) ? null : levels[k+1].m;     // bottom-up: level below's pick
     stepDivision(levels[k], P, target, belowM, sdt);
   }
   for(k=L-1; k>=0; k--){                               // supply UP: fill driven from below
-    sdt=dt*clockRate(k);
+    sdt=dt*clockRate(k)*levels[k].clk;
     var below = (k===L-1) ? null : levels[k+1];
     stepFill(levels[k], P, below, sdt);
   }
@@ -845,7 +849,7 @@ function advance(){
     buf.H[k].push(herfindahl(levels[k].p));
     buf.err[k].push(dist(levels[k].m, tg));
     buf.F[k].push(levels[k].F);
-    buf.hzn[k].push(levels[k].tau/clockRate(k));   // emergent horizon in real model-time
+    buf.hzn[k].push(levels[k].tau/(clockRate(k)*levels[k].clk));   // emergent horizon, real model-time
     if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); buf.F[k].shift(); buf.hzn[k].shift(); }
   }
   // recent share vectors of the viewed level, for the per-bar range whiskers

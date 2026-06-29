@@ -168,6 +168,39 @@ fast break from below is absorbed by the slow levels above.
 - **No hysteresis graphs** or non-core printouts. The user removed them as an
   obvious idea not worth a full readout.
 
+## Discriminating Mechanism A from B (the A-vs-B protocol)
+
+The four disorders are two malfunctions x depth: division collapse (`G` high) and
+fill break (`kP` -> 0), at the top (schizophrenia/bipolar) or at n-1
+(autism/ADHD). A separate hypothesis is that ADHD is a **short clock** at n-1
+(`clk` > 1, the level runs faster) rather than a `kP` break. These two
+mechanisms BOTH raise variance, so variance cannot tell them apart. The
+discriminating protocol (run it via a headless Node+Puppeteer harness on the
+real sim, not a port):
+
+- **A (lower damping):** ramp `levels[1].kP` 1 -> 0, all else healthy. Predict a
+  Hopf at `omega0 = sqrt(kI*Fstar)` (x the level's clock); confirm by (i) peak
+  frequency matching `omega0` and (ii) the peak NOT drifting when `dt` is halved.
+- **B (short clock):** ramp `levels[1].clk` 1 -> high (the level reconfigures
+  faster). This is a real lever with teeth (scales the whole reconfiguration
+  clock); the yhat-smoothing horizon alone is inert.
+- **Discriminators** (variance is deliberately NOT one), at n-1 AND the top:
+  power-spectrum peak + sharpness, lag-1 autocorrelation, return time.
+
+**Measured result (on record):** A and B cross-dissociate AT THE LESION SITE
+(n-1): A drives fill variance UP, low-frequency, correlated, into a limit cycle;
+B drives fill variance DOWN, high-frequency, decorrelated (ac1 -> 0). Distinct
+mechanisms -- the sibling framing survives at the lesion. BUT at the TOP they are
+IDENTICAL: the containment gate (`gate = 1 - kP/kP_healthy = 0` for a healthy
+upper level) FULLY absorbs both, so the top is unchanged from healthy for either
+lesion -- the variance-match is moot (neither moves top variance). So a contained
+lesion is invisible/indistinguishable at the headline. If the top should be able
+to tell A from B (an attenuated peak vs attenuated broadband), the gate needs
+PARTIAL leakage, not full absorption. Numerical caveat: the `kP=0` limit-cycle
+frequency matches `omega0` at `dt=0.005` but is ~40% off at the default
+`dt=0.01` (Euler under-resolves the violent relaxation cycle) -- frequencies are
+only quantitative at finer `dt` / a better integrator.
+
 ## Working conventions
 
 - Keep `docs/index.html` ASCII-only. Check with `grep -lP '[^\x00-\x7f]'`.
