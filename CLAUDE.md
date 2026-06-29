@@ -303,11 +303,19 @@ fast break from below is absorbed by the slow levels above.
 
 ## Discriminating Mechanism A from B (the A-vs-B protocol)
 
-The four disorders are two malfunctions x depth: division collapse (`G` high) and
-fill break (`kP` -> 0), at the top (schizophrenia/bipolar) or at n-1
-(autism/ADHD). A separate hypothesis is that ADHD is a **short clock** at n-1
-(`clk` > 1, the level runs faster) rather than a `kP` break. These two
-mechanisms BOTH raise variance, so variance cannot tell them apart. The
+> **NOTE (new regime).** This protocol was run with the lesions injected at **n-1**
+> as the test site, and its prose below still uses the old "x depth" framing.
+> Under the new regime the disorders are **top-level** (see the board table). The
+> A/B fingerprint dissociation is a **mechanism signature, level-independent** —
+> it holds wherever the lesion sits — so these results stand; read "at n-1" here
+> as the historical test location, not as where the disorder lives. (The clock
+> control is now `tauW` short, the inverse of the old `clk > 1`.)
+
+The four disorders were originally framed as two malfunctions x depth: division
+collapse (`G` high) and fill break (`kP` -> 0), at the top (schizophrenia/bipolar)
+or at n-1 (autism/ADHD). A separate hypothesis is that ADHD is a **short clock**
+(`tauW` short / `clk` > 1, the level runs faster) rather than a `kP` break. These
+two mechanisms BOTH raise variance, so variance cannot tell them apart. The
 discriminating protocol (run it via a headless Node+Puppeteer harness on the
 real sim, not a port):
 
