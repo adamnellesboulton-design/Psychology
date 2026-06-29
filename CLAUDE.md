@@ -169,12 +169,18 @@ honest statement is: weak coherence = the contest; insistence on sameness = the
 basin (or an unbuilt gateable-world-fit), two levels, not one control.
 
 ### Next-session queue (do cold and fresh, in this order)
-1. **ADHD behavioral test (scatter vs hyperfocus).** Ready, decoupled, needs no
-   new machinery: with short `tauW @ n-1`, vary the leading coalition's strength
-   -- no dominant winner -> rapid turnover (scatter/inattention); one strong
-   immediate winner -> it keeps re-winning (hyperfocus). If both fall out of the
-   one short clock, scatter and hyperfocus are one mechanism (they should come
-   paired in a carrier). This one can run now on the current build.
+1. **ADHD behavioral test (scatter vs hyperfocus) -- RUN, POSITIVE.** Short
+   clock, winner strength varied by input clarity, at the world-facing level
+   (4-seed). Under the short clock behavior depends ONLY on winner strength:
+   weak/ambiguous winner -> scatter (switch rate ~0.0073, ~2x), strong winner ->
+   held (~0.0045, ~= healthy 0.0043 = relative hyperfocus). Healthy clock is flat
+   regardless (~0.0037-0.0043). So scatter and hyperfocus are ONE mechanism (the
+   short clock), selected by input -- they come paired in a carrier, as
+   predicted. Caveat: the split shows at the level that reads the world DIRECTLY;
+   injected at n-1 it washes out (input arrives pre-stabilized from the top),
+   consistent with ADHD being contained there. So ADHD now has BOTH a fill
+   fingerprint (variance down / decorrelated, confirmed) and a behavioral face
+   (scatter/hyperfocus), both from the one short clock.
 2. **Autism unification test (the canalization chain) -- BLOCKED, needs a build
    first.** The four-link test (weak binding penalizes NOVELTY not just
    ambiguity -> the stamp fires less on novelty -> standing canalizes routine
