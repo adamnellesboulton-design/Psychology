@@ -108,6 +108,44 @@ result, not a bug** — the model twice refused to collapse two things into one,
 which is exactly what makes it a real instrument (it can say no). Record these as
 findings; do not "fix" them.
 
+### 0. The two-axis map is complete at the TOP (pre-registered, CONFIRMED)
+Ran the full five-condition map (healthy + the four lesions) at the top level,
+crossed with clear (`yR`=0.85) and ambiguous (`yR`=0.15) input, reading BOTH the
+headline classifier AND the fingerprint per cell, plus a reweighting probe for
+the gross division break. **Decision-rule outcome 1: all four reproduce at one
+level; depth is not needed to locate the disorders** (it only buys containment).
+Clear-field cells (the diagnostic condition):
+- **schizophrenia `G`+**: headline `division collapsed: monopoly` (gross); H
+  0.58->0.91, err 0.50->1.13.
+- **bipolar `kP`->floor**: headline `fill oscillating: limit cycle` (gross);
+  fillVar 3.1e-3->3.3e-1 (~100x up), amp 1.56, ac1 pinned 0.999.
+- **autism `G`-**: headline `healthy` (trace by design); H sags faintly under
+  clear (0.58->0.52) and **pronounced under ambiguous** (healthy 0.37 -> autism
+  0.26). Fingerprint shows; label stays healthy.
+- **ADHD `tauW` short**: headline `healthy` (trace); the **B fingerprint** at the
+  top — fillVar 3.1e-3->1.2e-4 (~25x DOWN), ac1 0.999->0.985, amp 0.03. Under
+  ambiguous input turnover ~2x healthy (0.0027->0.0090 — the scatter face).
+
+Two results beyond the confirmation:
+- **Reweighting probe (the schizophrenia claim, re-confirmed).** Fix the world,
+  settle the `G`+ monopoly, jump the world by 0.55, re-settle: the monopoly stays
+  pinned (H 1.00->1.00) but its winner **migrates to track the jump** (follow =
+  0.69; healthy over-migrates at 3.12 because `m` sits near a coalition vertex).
+  Collapse is **over-binding, not rigidity** — decoupled in *static* error yet
+  still *follows change*. Matches finding #3.
+- **Input clarity gates gross-break severity (new).** Under an ambiguous field
+  BOTH gross breaks fall below their classifier thresholds: schizo H 0.91->0.52
+  (< `H_collapse` 0.72), bipolar amp 1.56->0.31 (< `amp_osc` 0.45), so both read
+  `healthy`. An ambiguous world gives the high-`G` monopoly nothing decisive to
+  lock onto and shrinks the homeostat's drive. The gross labels are clear-field
+  phenomena; ambiguity softens them — the OPPOSITE of autism's trace fingerprint,
+  which sharpens under ambiguity. Not a bug; do not retune thresholds for it.
+- **Harness caveat (record it).** `advance()` does NOT update the `#regime`
+  label — only `render()`/`updateDiag()` do. A headless harness that steps with
+  `advance()` must call `window.updateDiag()` before reading `#regime`, or the
+  label stays frozen at its page-load value (every cell reads "healthy" while the
+  fingerprints, read from `buf`, are correct). This bit the first map run.
+
 ### 1. ADHD = short averaging clock `tauW` (BUILT, confirmed)
 Exposed the per-level averaging clock as `tauW` (the shortening factor on a
 level's one clock: the homeostat bar, the scoring/`yhat` horizon, and the
