@@ -34,35 +34,46 @@ of the script. Retune there; nothing is hard-coded elsewhere.
 - **Fill `F`** — PI homeostat (`kP` proportional, `kI` integral) defending a
   setpoint. Feast/famine (`env`) shifts that setpoint; `sigmaF` is always-on
   noise.
-- **Precision `rho`** — outer loop, relaxes toward an evidence-fit target at
-  rate `phi`.
-- **Evidence** — a slow Lissajous wander at radius `yR`; `delta` sets the bar's
-  averaging clock `tau` (`tau = tauMin + (tauMax-tauMin)*delta`). One time
-  constant, two jobs: the scoring/evidence horizon over which `yhat` smooths the
-  target, AND, in the multi-level build, the window over which a level averages
-  the one below. Short `tau` chases the instant (ADHD). `delta` is the bar's
-  clock; `kP` is its damping — bipolar and ADHD are the two faults of the one
-  homeostat (siblings, not the same break).
+- **Precision `rho`** — per-channel weight on the consensus `m` and the coherence
+  term; relaxes toward an evidence-fit target at internal rate `phi`. NOT a board
+  control, and NOT the autism mechanism: exposing its retuning rate (`flex`) was
+  tested and rejected (precision is not separable from `G` — see findings).
+- **Evidence** — a slow Lissajous wander at radius `yR`. The bar's averaging
+  clock is `tau`, the per-level horizon: one constant doing the scoring/evidence
+  horizon (`yhat` smoothing), the inter-level EMA read, AND the level's whole
+  reconfiguration rate. In the BUILT model that clock is exposed as **`tauW`**
+  (the shortening factor; short = ADHD); `delta`/`tauMin`/`tauMax` are the
+  vestigial single-level form. `tauW` is the bar's clock; `kP` is its damping —
+  bipolar (damping) and ADHD (clock) are the two faults of the one fill homeostat
+  (siblings, not the same break).
 
-### The four controls → regimes
+### The board controls → regimes (current, as built)
 
-| Control | Group | Out-of-range regime |
+Per-level malfunction sites (set on the viewed level), plus the environment.
+This SUPERSEDES the earlier `delta`/`phi` framing of the two trait controls —
+see "What today's implementation established" below for why.
+
+| Control | Axis | Out-of-range regime |
 |---|---|---|
-| `G` integrating gain | malfunction | high → division collapses (frozen monopoly); low → disorganised |
-| `kP` homeostat damping | malfunction | → 0 → fill oscillates (limit cycle) |
-| `delta` bar's averaging clock | miscalibration | short → chases noise (ADHD); governs scoring horizon + bar memory — subtle, trace-level |
-| `phi` precision flexibility | miscalibration | → 0 → rigid after a context shift (autism) — subtle, trace-level |
+| `G` coherence gain | division (binding) | high @ top → division collapses, frozen monopoly (schizophrenia); low → weak binding, poor concentration (autism's weak-central-coherence face; also "disorganised") |
+| `kP` homeostat damping | fill (damping) | → floor → fill oscillates, bounded limit cycle (bipolar @ top); the floor is small-positive (exactly 0 is undamped and blows up) |
+| `tauW` averaging clock | fill (clock) | short @ n-1 → forgets fast, fill hugs setpoint, fast decorrelated jitter (ADHD); variance DOWN, ac1 DOWN — the B fingerprint, opposite of `kP` |
 
-Plus the environment: `env` > 0 floods, `env` < 0 starves.
+Plus the environment: `chaos` scales the external noise (volatility); `env` is
+the feast/famine tilt on it (`env` > 0 floods/manic, `env` < 0 starves/depressed).
 
-Note (the one homeostat): bipolar and ADHD are the two faults of the single fill
-homeostat — `kP` is its damping, `delta` is its averaging clock. Siblings, not
-the same break. The multi-level recursion section below is a **bipolar-only**
-demonstration: it shows the damping break (`kP -> 0`) propagating up the levels,
-contained versus propagated, as a *severity* axis. It is NOT the ADHD mechanism
-(do not frame ADHD as a contained fill oscillation). ADHD stays the clock fault
-(`delta` short, preset `delta = 0.08`). The division pair, schizophrenia and
-autism, is separate again (`G`, `phi`).
+The fill pair (one homeostat, two faults — siblings): `kP` is its **damping**,
+`tauW` is its **averaging clock**. Bipolar is the damping break, ADHD is the
+short clock. They cross-dissociate (A-vs-B protocol below): bipolar drives fill
+variance UP / correlated / into a slow limit cycle; ADHD drives it DOWN /
+decorrelated / broadband. The multi-level recursion section is a **bipolar-only**
+severity demonstration (the `kP` break propagating up, contained vs propagated);
+it is NOT the ADHD mechanism.
+
+The division pair is `G` (binding level) — and that is the WHOLE division axis:
+there is no separate precision-flexibility control (see findings). `delta`,
+`tauMin`, `tauMax`, `phi` survive only in the isolated single-level core
+(`P.levels <= 1`), which the built model never runs; they are not board controls.
 
 ### Classifier
 
@@ -81,6 +92,81 @@ In the built multi-level model the classifier reads the parts that matter for
 each regime: division (collapse/scatter/tracking) at the fast bottom nucleus
 (division is a current-level quantity), fill (oscillation/flood/starve) at the
 slow top, where a break only registers once it has propagated up.
+
+## What today's implementation established (the autism / ADHD result)
+
+Two attempts to add a fourth, separate control each ended in a **structural
+result, not a bug** — the model twice refused to collapse two things into one,
+which is exactly what makes it a real instrument (it can say no). Record these as
+findings; do not "fix" them.
+
+### 1. ADHD = short averaging clock `tauW` (BUILT, confirmed)
+Exposed the per-level averaging clock as `tauW` (the shortening factor on a
+level's one clock: the homeostat bar, the scoring/`yhat` horizon, and the
+inter-level EMA read are all the same constant; `tauW=1` healthy, `<1` runs the
+whole level faster). Short `tauW @ n-1` reproduces the **B fingerprint** by
+prediction and dissociates cleanly from the `kP` damping break:
+- n-1 fill variance: healthy 5.2e-3 -> ADHD 3.4e-4 (DOWN ~15x) vs bipolar 1.3e-1 (UP).
+- n-1 lag-1 ac1: healthy 0.999 -> ADHD 0.973 (decorrelated) vs bipolar 0.998 (pinned).
+- Contained: ADHD top variance ~ baseline (the fast jitter is low-passed); headline
+  stays healthy (trait-level). Variance-DOWN direction is dt-robust (direction
+  stable, magnitude not). `tauW` REPLACED the internal `clk` factor (it is its
+  inverse: `clk>1=faster` became `tauW<1=faster=short clock`).
+
+### 2. Precision flexibility is NOT a separable control (tested, rejected)
+The "precision flexibility = autism" hypothesis (a per-channel `rho` with an
+inverse-volatility target, relaxing at a rate `flex`; autism = `flex->0`) was
+implemented faithfully and tested multi-run. Result: with the regimes intact,
+freezing `flex` does **nothing** (precision is not on the critical path); making
+it load-bearing (precision-weighting the world-fit term) makes `flex` bite but
+**scatters every regime** (healthy tracking-lost, schizophrenia stops collapsing,
+H ~0.25 everywhere). No setting is both load-bearing and non-destructive. **The
+precision LEVEL is already `G`** (they multiply in the one coherence term); there
+is no room for a separate precision-flexibility rate. The control was reverted.
+This is the first "no": G and precision are not separable on the division side.
+
+### 3. The G axis carries weak central coherence but NOT rigidity (tested)
+Pre-registered G-axis test (G level x input clarity; Variant A static-G, Variant
+B frozen-G-flexibility; rigidity judged by a **reweighting probe**, not by
+H-pinned-high). Verdict = the test's outcome 3:
+- **Weak-central-coherence face: YES.** Low / frozen-low `G` in an ambiguous
+  field loses concentration (H 0.52 -> 0.34 when G is frozen and cannot rise). The
+  freeze is non-inert.
+- **Insistence-on-sameness / rigidity face: NO.** A high-G monopoly still
+  *follows* a world shift (reweighting probe = 1) -> that is strong binding, not
+  rigidity. Frozen-G is no slower to follow a shift than healthy. No G setting
+  produces lock-AND-fail-to-follow.
+
+**Why, and read this as a claim the model is MAKING, not a gap:** the world-fit
+term (`lambda*||u - yhat||^2`) is **unconditional** -- it always pulls the winner
+toward the current world -- so the contest follows world changes regardless of
+any binding/precision lesion. Therefore, in this architecture, **insistence on
+sameness cannot be a binding failure.** The model predicts autism's two faces
+have **different mechanisms**: weak central coherence is a binding/integration
+deficit (the contest, the `G` axis); insistence on sameness is a gating of
+world-coupling the contest deliberately does not reduce to binding. They co-occur
+in a person because both are hit, not because they are one thing. This is the
+second "no": weak-coherence and rigidity are not one mechanism.
+
+### The rigidity face: a characterized edge, NOT a TODO
+Autism is **half-captured by design, for a principled reason**. The contest model
+captures the **perceptual/integration** face (weak central coherence, real-time,
+the `G` axis). The **behavioral/insistence** face is hypothesized to live at a
+different level of description -- the **developmental-basin** machinery (sameness
+= a deep canalized basin resisting remaking), slow and learned -- not the fast
+contest. Forcing rigidity into the contest would be the same category error as
+forcing masking's learned content into the fast dynamics.
+
+**Scoped, NOT built (do not build at the end of a session):** a possible
+contest-level mechanism for rigidity is a **gateable world-fit** -- route the
+world-pull through a local precision/attention term a lesion can suppress
+*locally* without globally zeroing it (naive global zeroing scattered every
+regime). It modifies the one term every regime depends on, so the failure mode is
+"broke schizophrenia and bipolar to add half of autism." Pursue ONLY if the
+basin-level account does not cover rigidity, cold and fresh, with the FULL regime
+suite as a gate, as the first thing in a session, never the last. Until then the
+honest statement is: weak coherence = the contest; insistence on sameness = the
+basin (or an unbuilt gateable-world-fit), two levels, not one control.
 
 ## The recursive stack (multi-level): bipolar as propagating severity
 
