@@ -201,6 +201,37 @@ frequency matches `omega0` at `dt=0.005` but is ~40% off at the default
 `dt=0.01` (Euler under-resolves the violent relaxation cycle) -- frequencies are
 only quantitative at finer `dt` / a better integrator.
 
+## Healthy control (calibration; run it before any A/B sweep)
+
+The control does three jobs: define the model's time-unit (so thresholds are
+ratios, not absolute-tick guesses), set the severity-zero anchor, and confirm
+real rest. Measured results (on record), all in model-time:
+
+- **Unit.** `tau_relax` (first 1/e crossing of an impulse to a level's fill) =
+  top 1.28, n-1 1.04. Predicted Hopf period `2*pi/sqrt(kI*Fstar)` = 8.9
+  intrinsic, 13.2 at n-1 (x its clock). So Hopf-period / tau_relax ~= 10-13;
+  size FFT windows in Hopf-periods, burn-in in tau_relax.
+- **Rest.** Horizon gradient 6.45 -> 5.2 -> 4.32 -> 3.6, volatility ~floor,
+  fill ~F*. (Caveat: n-1 max-share can read ~0.88 at an instant -- check
+  plurality sustained, not single-tick.)
+
+**Three things the control proved the naive indicators get WRONG -- use these
+corrected forms in the sweep:**
+1. Healthy fill is NOT flat: it carries the slow world-tracking rhythm
+   (f~0.0475), so the GLOBAL peak-to-floor ratio is ~3e5 even at rest. The
+   peak test must be the power in the **omega0 band** specifically
+   (f0 = sqrt(kI*Fstar)*clockRate(level)/2pi ~= 0.076 at n-1), not the global
+   peak. (omega0-band power is clean: healthy ~13 -> A ~38.)
+2. Healthy lag-1 autocorrelation is ~0.99 (the fill is smooth), not
+   low-to-moderate. So A has ~no headroom to rise; **B's FALL below 0.99 is the
+   live autocorrelation signal**, not A's rise.
+3. Variance is non-stationary on a 1024 window (~2x between halves, from the
+   slow rhythm), so variance-matching is unreliable -- use long windows and
+   lean on ratio/normalized indicators (omega0-band ratio, ac1, return-time)
+   rather than raw variance matching.
+
+dt-halving at rest leaves ac1 stable (dt-robust at rest).
+
 ## Working conventions
 
 - Keep `docs/index.html` ASCII-only. Check with `grep -lP '[^\x00-\x7f]'`.
