@@ -133,7 +133,8 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
         <h2>Malfunctions <span class="tag">two faults x depth</span></h2>
         <div class="ctl" id="ctl-G"></div>
         <div class="ctl" id="ctl-kP"></div>
-        <p class="note">Two faults, located by depth: set on the viewed level (drill with the layer picker above). Division gain G at the top &rarr; schizophrenia, at n-1 &rarr; autism. Fill damping kP at the top &rarr; bipolar, at n-1 &rarr; ADHD. A lesion deeper than n-1 is absorbed before it reaches the top, so it never expresses.</p>
+        <div class="ctl" id="ctl-tauW"></div>
+        <p class="note">Per-level faults, set on the viewed level (drill with the layer picker above). G-collapse at the top &rarr; schizophrenia. The FILL homeostat has two faults (siblings): damping kP at the top &rarr; bipolar; averaging clock tauW short at n-1 &rarr; ADHD. A lesion deeper than n-1 is absorbed before it reaches the top.</p>
       </div>
       <div class="group">
         <h2>Environment <span class="tag">volatility &amp; tilt</span></h2>
@@ -194,6 +195,10 @@ var CONFIG = {
   // delta + tauMin/tauMax remain only for the isolated SINGLE-level core, where a
   // level has no neighbour to couple to and its horizon is genuinely free.
   tau0:3.6,
+  tauW:1.0,           // per-level averaging-clock SHORTENING factor (the ADHD control,
+                      // healthy default). 1 = healthy; <1 runs a level's whole clock
+                      // (homeostat + scoring horizon + inter-level read) faster, so it
+                      // forgets fast (short clock = ADHD). Sibling of kP on one homeostat.
   delta:0.6, s:0.8, rho0:1.0, rhoMin:0.05,
   epi:0.35,           // epistemic weight in the precision objective (A.7): a channel
                       // that dissents from the consensus keeps a precision floor, so
@@ -227,9 +232,9 @@ var CONFIG = {
 };
 // slider metadata: healthy resting value (for the band marker) and range, per
 // control that has a slider (G, kP, chaos, env, speed). G/kP are per-level.
-var HEALTHY = {G:1.0, kP:1.0, env:0.0, chaos:1.0};
+var HEALTHY = {G:1.0, kP:1.0, tauW:1.0, env:0.0, chaos:1.0};
 var RANGES = {
-  G:[0.05,8.0], kP:[0.02,2.0], env:[-1,1], chaos:[0,4], speed:[0.1,4]
+  G:[0.05,8.0], kP:[0.02,2.0], tauW:[0.1,1.5], env:[-1,1], chaos:[0,4], speed:[0.1,4]
 };
 
 function randn(){ // Box-Muller
@@ -260,8 +265,8 @@ function initLevel(P, seed){
   // sites. A lesion is read by its level and depth: G-collapse / kP-break at the
   // top is schizophrenia / bipolar; at n-1 it is autism / ADHD.
   return {p:p, rho:rho, yhat:[0,0], yup:[0,0], m:[0,0], mwob:[0,0], pibar:0, u:makeU(n, seed),
-          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, clk:1, Fsupply:P.Fstar,
-          readBelow:P.Fstar, vol:0, tau:P.tau0};   // clk = per-level clock factor (B); vol/tau = emergent horizon; readBelow = EMA of level-below fill; mwob = OU epistemic wobble
+          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, tauW:P.tauW, Fsupply:P.Fstar,
+          readBelow:P.Fstar, vol:0, tau:P.tau0};   // tauW = per-level averaging-clock shortening factor (the ADHD control, 1=healthy, <1=short clock); vol/tau = emergent horizon; readBelow = EMA of level-below fill; mwob = OU epistemic wobble
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
@@ -408,18 +413,20 @@ function stepFill(lv, P, below, dt){
 // Clocks lengthen upward (bottom fast, top slow) in both passes.
 function stepStack(levels, P, y, dt){
   var L=levels.length, k, sdt;
-  // each level's clock = the stack gradient times its per-level factor clk. clk>1
-  // runs the WHOLE level faster (shorter memory across reconfiguration AND
-  // smoothing) -- the "short clock" sibling (Mechanism B), distinct from the kP
-  // damping break (Mechanism A). clk=1 is healthy.
+  // each level's clock = the stack gradient divided by its averaging-clock factor
+  // tauW. tauW is the SHORTENING factor (the ADHD control): tauW=1 is healthy,
+  // tauW<1 runs the WHOLE level faster (a shorter averaging window across BOTH the
+  // bar's homeostat, the scoring/yhat horizon, and the inter-level read -- they are
+  // one clock), so it forgets fast. It is the SIBLING of the kP damping break on
+  // the same homeostat (clock vs damping): short tauW = ADHD, kP->floor = bipolar.
   for(k=0; k<L; k++){                                  // feedback DOWN, channel UP
-    sdt=dt*clockRate(k)*levels[k].clk;                 // per-level clock (gradient x clk)
+    sdt=dt*clockRate(k)/levels[k].tauW;                 // per-level clock (gradient / tauW)
     var target = (k===0) ? y : levels[k-1].m;          // top-down: world / level above
     var belowM = (k===L-1) ? null : levels[k+1].m;     // bottom-up: level below's pick
     stepDivision(levels[k], P, target, belowM, sdt);
   }
   for(k=L-1; k>=0; k--){                               // supply UP: fill driven from below
-    sdt=dt*clockRate(k)*levels[k].clk;
+    sdt=dt*clockRate(k)/levels[k].tauW;
     var below = (k===L-1) ? null : levels[k+1];
     stepFill(levels[k], P, below, sdt);
   }
@@ -555,12 +562,12 @@ function slider(host, key, label, sym, fmt, hint){
   var inp=el("s_"+key), val=el("v_"+key);
   // G (coherence gain) and kP (fill damping) are the PER-LEVEL malfunction sites:
   // they read/write the currently viewed level, not a global scalar.
-  function cur(){ return key==="speed"?speed : key==="G"?levels[viewLevel].G : key==="kP"?levels[viewLevel].kP : P[key]; }
+  function cur(){ return key==="speed"?speed : key==="G"?levels[viewLevel].G : key==="kP"?levels[viewLevel].kP : key==="tauW"?levels[viewLevel].tauW : P[key]; }
   inp.value = cur();
   function show(){ val.textContent = fmt(cur()); }
   inp.addEventListener("input", function(){
     var v=parseFloat(inp.value);
-    if(key==="speed") speed=v; else if(key==="G") levels[viewLevel].G=v; else if(key==="kP") levels[viewLevel].kP=v; else P[key]=v;
+    if(key==="speed") speed=v; else if(key==="G") levels[viewLevel].G=v; else if(key==="kP") levels[viewLevel].kP=v; else if(key==="tauW") levels[viewLevel].tauW=v; else P[key]=v;
     show();
   });
   show();
@@ -573,7 +580,8 @@ function slider(host, key, label, sym, fmt, hint){
 
 var f2=function(x){return x.toFixed(2);};
 slider(el("ctl-G"),"G","Coherence gain","G",f2,"PER LEVEL (set on the viewed level). The binding toward consensus. Too high: the winner freezes into a self-confirming monopoly, decoupled from y -- at the TOP that is schizophrenia (delusion), at n-1 it is autism (rigid, locked onto its reading). Too low: no coherent winner (disorganized).");
-slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). Toward its minimum the fill loses its damping and swings -- a bounded limit cycle (the break). At the TOP that is a global mood swing (bipolar); at n-1 it starts contained, then the slow n-1 swing leaks UP and decompensates to the top over time (ADHD). The floor is a small positive value: exactly 0 is undamped and blows up rather than settling to the cycle.");
+slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). Toward its minimum the fill loses its damping and swings -- a bounded limit cycle. At the TOP that is a global mood swing (bipolar); at n-1 it starts contained, then the slow swing leaks up over time. The floor is a small positive value: exactly 0 is undamped and blows up rather than settling.");
+slider(el("ctl-tauW"),"tauW","Averaging clock","tauW",f2,"PER LEVEL (set on the viewed level). The fill homeostat's averaging window (one clock for its bar, its scoring horizon, and its read of the level below). 1 = healthy; drag DOWN to run the clock short. Short clock at n-1 = ADHD: the level forgets fast, the fill hugs setpoint (variance DOWN, decorrelated -- the opposite fingerprint to bipolar's damping break), and the fast jitter is low-passed by the slower levels above, so it stays contained. Sibling of kP on the one homeostat (clock vs damping).");
 slider(el("ctl-chaos"),"chaos","Chaos","x",function(x){return x.toFixed(2)+"x";},"");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
@@ -581,7 +589,7 @@ slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";}
 // layer picker -> which level of the stack the panels drill into
 function viewNote(k){
   if(k===0) return "Level n, the top: slow, global, mood, the only level that reads the external world. The gross disorders express HERE: G-collapse -> schizophrenia (a self-confirming monopoly decoupled from the world), kP-break -> bipolar (a global mood swing). Its pick propagates down as the target every level below tracks.";
-  if(k===1) return "Level n-1: the level just under the world-facing top. The trait disorders express HERE: a G-collapse is autism (this contest freezes onto its reading and stops tracking the context above it -- rigid, but contained below the world-facing top, not a gross delusion); a kP-break is ADHD (a fast, contained, local fill oscillation, not a global mood swing).";
+  if(k===1) return "Level n-1: the level just under the world-facing top. ADHD expresses HERE as a short averaging clock (tauW down): the level forgets fast, its fill hugs setpoint with fast decorrelated jitter (variance DOWN -- the opposite of bipolar's damping swing), and the jitter is low-passed by the slower levels above, so it stays contained below the world-facing top.";
   return "Level n-"+k+": deeper in the stack, fast and local. A lesion here is meant to be ABSORBED before it expresses -- low-passed by the slower, well-damped levels above before it can reach n-1 or the top. Drill in to watch a break here stay contained.";
 }
 function setView(k){
@@ -591,6 +599,7 @@ function setView(k){
   // the per-level malfunction dials (G, kP) follow the viewed level
   var gi=el("s_G"); if(gi){ gi.value=levels[viewLevel].G; el("v_G").textContent=f2(levels[viewLevel].G); }
   var kpi=el("s_kP"); if(kpi){ kpi.value=levels[viewLevel].kP; el("v_kP").textContent=f2(levels[viewLevel].kP); }
+  var twi=el("s_tauW"); if(twi){ twi.value=levels[viewLevel].tauW; el("v_tauW").textContent=f2(levels[viewLevel].tauW); }
   resizeAll();
 }
 Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setView(+b.dataset.layer); }; });
@@ -624,7 +633,7 @@ function advance(){
     buf.H[k].push(herfindahl(levels[k].p));
     buf.err[k].push(dist(levels[k].m, tg));
     buf.F[k].push(levels[k].F);
-    buf.hzn[k].push(levels[k].tau/(clockRate(k)*levels[k].clk));   // emergent horizon, real model-time
+    buf.hzn[k].push(levels[k].tau*levels[k].tauW/clockRate(k));   // emergent horizon, real model-time (short tauW shortens it)
     if(buf.H[k].length>BUFLEN){ buf.H[k].shift(); buf.err[k].shift(); buf.F[k].shift(); buf.hzn[k].shift(); }
   }
   // early-warning + classifier run on the collated TOP level (levels[0]) and its fill
