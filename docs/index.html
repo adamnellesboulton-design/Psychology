@@ -222,10 +222,12 @@ var CONFIG = {
   env:0.0,            // feast (+1) .. famine (-1); reproductive tilt on enrolment --
                       // whether each level's population (its fill) grows or shrinks
   envGain:0.85,       // how hard feast/famine moves the fill's setpoint
-  sigmaF:0.035,       // always-on environmental noise on the fill (the "randomness")
-  sigmaPi:0.015,      // small noise in the contest so winners can be unseated
-  sigmaY:0.20,        // observation noise on the evidence; a short horizon chases it (ADHD)
-  sigmaM:0.02,        // epistemic uncertainty: per-tick wobble in the system's estimate m
+  sigmaF:0.02,        // always-on environmental noise on the fill (the "randomness")
+  sigmaPi:0.01,       // small noise in the contest so winners can be unseated
+  sigmaY:0.12,        // observation noise on the evidence; a short horizon chases it (ADHD)
+  sigmaM:0.007,       // epistemic uncertainty: per-tick wobble in the system's estimate m
+                      // (kept small -- it is white, added straight onto m, so it reads as
+                      // a sawtooth on the tracking-error trace; a little goes a long way)
   // diagnostics thresholds (one place; tunable)
   band:0.40,          // euthymic half-band on F
   H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.25,
