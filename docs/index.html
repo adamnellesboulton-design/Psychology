@@ -203,11 +203,6 @@ var CONFIG = {
                       // UP forget faster (its horizon drops), while the mood stays
                       // contained by damping
   G:1.0, Fstar:1.0, a:0.5, theta0:0.0, kI:0.5, kP:1.0, zClamp:10.0,
-  leak:0.06,          // partial containment: even a healthy level relays this
-                      // fraction of the disturbance from below, so a contained
-                      // lesion leaves an ATTENUATED fingerprint upstairs (an
-                      // attenuated peak for A, attenuated broadband for B) instead
-                      // of being fully erased -- without tripping the headline.
   phi:1.0,
   // The averaging clock is NOT a free global dial in the multi-level stack: each
   // level's scoring horizon falls out of the clock gradient (tau0, the fastest
@@ -270,7 +265,7 @@ function initLevel(P, seed){
   // top is schizophrenia / bipolar; at n-1 it is autism / ADHD.
   return {p:p, rho:rho, yhat:[0,0], yup:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
           F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, clk:1, Fsupply:P.Fstar,
-          vol:0, tau:P.tau0};   // clk = per-level clock factor (B); vol/tau = emergent horizon
+          readBelow:P.Fstar, vol:0, tau:P.tau0};   // clk = per-level clock factor (B); vol/tau = emergent horizon; readBelow = EMA of level-below fill
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
@@ -352,7 +347,9 @@ function stepDivision(lv, P, y, belowM, dt){
 // fast deviation of the level below (belowF) -- this is how an oscillation
 // propagates UP the stack. lv.kP is the local damping; at kP->0 the homeostat
 // loses its damping and Hopf-oscillates (the break). A slow, well-damped upper
-// level low-passes a fast disturbance from below (containment).
+// level low-passes a fast disturbance from below (containment) via the one-pole
+// EMA read below -- containment is the EMA's frequency-dependent gain, not a
+// hand-set gate.
 function stepFill(lv, P, below, dt){
   // the bar is deposited from below (A.8): the ENV-FREE baseline a level defends
   // is the sustained supply of the level beneath it, tracked slowly over
@@ -369,18 +366,20 @@ function stepFill(lv, P, below, dt){
   // population (manic), famine lowers it (depressed).
   var Fset=lv.Fsupply*(1+P.envGain*P.env);
   var theta=P.theta0 + lv.kP*(lv.F-Fset) + P.kI*lv.z;
-  // a level RELAYS the disturbance from below in proportion to how undamped it
-  // is: a healthy (well-damped) level absorbs it (gate ~0) so a break below is
-  // contained; a weakened level (kP -> 0) passes it on, so the break propagates
-  // up only through levels that are themselves weak. Containment is thus a
-  // property of kP, the same dial as the break. The disturbance is the level
-  // below's fast deviation from its OWN setpoint (its oscillation).
-  // gate = how much of the disturbance below this level relays up. A weakened
-  // level (kP->0) passes it on (gate->1); a healthy level mostly absorbs it but
-  // leaks a floor `leak`, so a contained break still attenuates upward rather than
-  // vanishing -- enough to read in the top's spectrum, not enough to trip it.
-  var gate = P.leak + (1-P.leak)*Math.max(0, Math.min(1, 1 - lv.kP/P.kP));
-  var disturb = (below===null) ? 0 : P.couple*(below.F - below.Fset)*gate;
+  // a level reads the level below's fill through a one-pole exponential moving
+  // average with time constant tau (the level's OWN emergent horizon -- the same
+  // tau that sets its scoring/averaging window). The disturbance is this SMOOTHED
+  // read's deviation from the below level's setpoint, not the instantaneous one.
+  // Containment is now emergent and graded: a slow upper level (long tau)
+  // low-passes a fast disturbance below it with gain 1/sqrt(1+(omega*tau)^2) --
+  // the EMA IS the leakage. A fast oscillation from below is attenuated (never
+  // fully nulled) in proportion to how far its frequency sits above 1/tau, so a
+  // contained break still leaves a frequency-shaped residual in the read above,
+  // and ADHD (shorter tau) reads the level below less smoothed (chases it).
+  // The homeostat's own z-integral stays exact (NOT leaky); only the inter-level
+  // read is an EMA.
+  if(below!==null){ lv.readBelow += (below.F - lv.readBelow)*dt/lv.tau; }
+  var disturb = (below===null) ? 0 : P.couple*(lv.readBelow - below.Fset);
   var dF=lv.F*(P.a*lv.pibar - theta + P.sigmaF*randn() + disturb);
   lv.F=Math.max(0, lv.F + dt*dF);
   lv.z=Math.max(-P.zClamp, Math.min(P.zClamp, lv.z + dt*(lv.F-Fset)));   // anti-windup

@@ -190,16 +190,35 @@ real sim, not a port):
 **Measured result (on record):** A and B cross-dissociate AT THE LESION SITE
 (n-1): A drives fill variance UP, low-frequency, correlated, into a limit cycle;
 B drives fill variance DOWN, high-frequency, decorrelated (ac1 -> 0). Distinct
-mechanisms -- the sibling framing survives at the lesion. BUT at the TOP they are
-IDENTICAL: the containment gate (`gate = 1 - kP/kP_healthy = 0` for a healthy
-upper level) FULLY absorbs both, so the top is unchanged from healthy for either
-lesion -- the variance-match is moot (neither moves top variance). So a contained
-lesion is invisible/indistinguishable at the headline. If the top should be able
-to tell A from B (an attenuated peak vs attenuated broadband), the gate needs
-PARTIAL leakage, not full absorption. Numerical caveat: the `kP=0` limit-cycle
-frequency matches `omega0` at `dt=0.005` but is ~40% off at the default
-`dt=0.01` (Euler under-resolves the violent relaxation cycle) -- frequencies are
-only quantitative at finer `dt` / a better integrator.
+mechanisms -- the sibling framing survives at the lesion. Calibrated sweep
+(dt=0.005, omega0-band power at f0~0.076, return-time in tau_relax(n-1)=1.04
+units): A `kP@n-1` 1->0.1 gives n-1 var 6.7e-3->1.2e-1, ac1 pinned ~0.97,
+omega0-band 5.8k->246k, return-time 1.08->6.15t; B `clk@n-1` 1->8 gives n-1 var
+6.8e-3->2.3e-4, ac1 0.977->0.316, omega0-band 6.5k->1.4, return-time 1.08->0.15t.
+They never share a non-trivial operating point: the supposed confound (variance)
+moves in OPPOSITE directions, so there is no "matched point" to disentangle --
+the dissociation is total on every indicator from baseline outward.
+
+**Containment is now a one-pole EMA, not a gate (this replaced the gate).** A
+level reads the level below's fill through `read += (below.F - read)*dt/tau`,
+with `tau` the reading level's OWN emergent horizon, and is disturbed by
+`couple*(read - below.Fset)`. Containment is the EMA's frequency-dependent gain
+`1/sqrt(1+(omega*tau)^2)` -- graded, never zero. The homeostat's own z-integral
+stays exact (NOT leaky); only the inter-level read is an EMA. The `leak`
+parameter is GONE. Consequence at the TOP (the headline): the EMA leakage now
+makes the top DISCRIMINATE A from B, where the full-absorption gate could not.
+As the n-1 lesion deepens, A leaks an attenuated slow Hopf peak up (top
+omega0-band 11k->82k, top var 6.1e-3->9.8e-3) because the slow oscillation sits
+inside the top's passband; B's fast decorrelated jitter is low-passed away (top
+omega0-band ~8-10k flat, top var ~6.5e-3 flat). The headline LABEL stays healthy
+for both (still contained -- the swing never trips the classifier), but the
+top's SPECTRUM carries A's signature and not B's. Verdict: dissociation, now
+legible at the headline as well as the lesion. (Autocorrelation: lag-1 suffices
+here because B's fall is large, 0.977->0.316; a tau_relax-scaled lag is the
+cleaner measure when the fall is subtle, to clear the ~0.98 healthy ceiling.)
+Numerical caveat: the `kP=0` limit-cycle frequency matches `omega0` at
+`dt=0.005` but is ~40% off at `dt=0.01` (Euler under-resolves the violent
+relaxation cycle) -- frequencies are only quantitative at finer `dt`.
 
 ## Healthy control (calibration; run it before any A/B sweep)
 
