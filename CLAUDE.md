@@ -114,25 +114,51 @@ crossed with clear (`yR`=0.85) and ambiguous (`yR`=0.15) input, reading BOTH the
 headline classifier AND the fingerprint per cell, plus a reweighting probe for
 the gross division break. **Decision-rule outcome 1: all four reproduce at one
 level; depth is not needed to locate the disorders** (it only buys containment).
-Clear-field cells (the diagnostic condition):
+
+**This table is the CLEAR-FIELD slice (`yR`=0.85) of a two-slice regime.** The
+other slice is the ambiguous field (`yR`=0.15), recorded in the "input clarity"
+bullet below: there the gross breaks soften (drop below threshold) and autism's
+trace sharpens. A cell is only fully specified by BOTH slices; do not read the
+clear-field row as the whole disorder. Clear-field cells (the diagnostic
+condition):
 - **schizophrenia `G`+**: headline `division collapsed: monopoly` (gross); H
-  0.58->0.91, err 0.50->1.13.
+  0.58->0.91, err 0.50->1.13. (Canonical H = the map's windowed-mean **0.91**,
+  averaged over the world's Lissajous wander. The reweighting probe below reads
+  H~1.00 — that is the instantaneous settled snapshot under a *fixed* world, not
+  the window-mean over the wander; same monopoly, two measurements.)
 - **bipolar `kP`->floor**: headline `fill oscillating: limit cycle` (gross);
-  fillVar 3.1e-3->3.3e-1 (~100x up), amp 1.56, ac1 pinned 0.999.
+  fillVar 3.1e-3->3.3e-1 (~100x up [pre-RK4 magnitude]), amp 1.56, ac1 pinned
+  0.999.
 - **autism `G`-**: headline `healthy` (trace by design); H sags faintly under
   clear (0.58->0.52) and **pronounced under ambiguous** (healthy 0.37 -> autism
   0.26). Fingerprint shows; label stays healthy.
 - **ADHD `tauW` short**: headline `healthy` (trace); the **B fingerprint** at the
-  top — fillVar 3.1e-3->1.2e-4 (~25x DOWN), ac1 0.999->0.985, amp 0.03. Under
-  ambiguous input turnover ~2x healthy (0.0027->0.0090 — the scatter face).
+  top — fillVar 3.1e-3->1.2e-4 (~25x DOWN [pre-RK4 magnitude]), ac1
+  0.999->0.985, amp 0.03. Under ambiguous input turnover ~2x healthy
+  (0.0027->0.0090 — the scatter face).
+
+> **Pre-RK4 magnitudes (read the multipliers as provisional).** The bipolar
+> ~100x-up and ADHD ~25x-down ratios were measured under the current **Euler**
+> integrator. Per the dt-robustness notes, the *directions* (bipolar var UP, ADHD
+> var DOWN; ac1 pinned vs fallen) are robust; the *magnitudes* are not, and will
+> shift under an RK4 integrator. Tag them as Euler-era numbers, not invariants.
+
+> **ADHD ac1 = 0.985 is a REAL attenuated fall, not a slip (resolved).** Stable
+> across 4 seeds: healthy ac1 0.998-1.000 vs ADHD 0.986-0.988 (tight, no
+> overlap). Lag-1 *understates* it because the top is one low-pass removed from
+> where `tauW` bites; at the `tau_relax`-scaled lag the decorrelation is
+> unambiguous — lag-5: healthy ~0.99 -> ADHD ~0.84; lag-20: healthy ~0.86 ->
+> ADHD ~0.19. So the 0.985 cell is the genuine (small) lag-1 face of a large
+> decorrelation; quote the scaled-lag numbers when the lag-1 fall looks marginal.
 
 Two results beyond the confirmation:
 - **Reweighting probe (the schizophrenia claim, re-confirmed).** Fix the world,
   settle the `G`+ monopoly, jump the world by 0.55, re-settle: the monopoly stays
-  pinned (H 1.00->1.00) but its winner **migrates to track the jump** (follow =
-  0.69; healthy over-migrates at 3.12 because `m` sits near a coalition vertex).
-  Collapse is **over-binding, not rigidity** — decoupled in *static* error yet
-  still *follows change*. Matches finding #3.
+  pinned (H 1.00->1.00, instantaneous settled snapshot) but its winner
+  **migrates to track the jump** (follow = 0.69; healthy over-migrates at 3.12
+  because `m` sits near a coalition vertex). Collapse is **over-binding, not
+  rigidity** — decoupled in *static* error yet still *follows change*. Matches
+  finding #3.
 - **Input clarity gates gross-break severity (new).** Under an ambiguous field
   BOTH gross breaks fall below their classifier thresholds: schizo H 0.91->0.52
   (< `H_collapse` 0.72), bipolar amp 1.56->0.31 (< `amp_osc` 0.45), so both read
