@@ -387,6 +387,10 @@ function drawChannel(cv, lv, target, isTop){
     ctx.fill();
     if(i===win){ ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(dxp,dyp,r+4,0,2*Math.PI); ctx.stroke(); }
     if(i===sel){ ctx.strokeStyle="#d6e6f2"; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.arc(dxp,dyp,r+8,0,2*Math.PI); ctx.stroke(); ctx.setLineDash([]); }
+    // when a dot has grown large enough, stamp its option number ON it, so a dot
+    // that has pulled away from the center is read directly without tracing the
+    // spoke back to a rim tick.
+    if(r>=6.5){ ctx.font="9px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillStyle = i===win ? "#0b141a" : "rgba(20,30,38,.8)"; ctx.fillText(String(i+1), dxp, dyp); }
   }
   ctx.textAlign="left"; ctx.textBaseline="alphabetic";
   // the target: the world (top level) or the level above's pick (cyan ring)
@@ -397,6 +401,10 @@ function drawChannel(cv, lv, target, isTop){
   ctx.beginPath(); ctx.moveTo(X(s.m),Y(s.m)); ctx.lineTo(X(y),Y(y)); ctx.stroke();
   // shared state m: filled accent
   ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(X(s.m),Y(s.m),5,0,2*Math.PI); ctx.fill();
+  // name m and the target right where they sit (cold-read without the legend)
+  ctx.font="9px monospace"; ctx.textBaseline="middle";
+  ctx.fillStyle="#ffb000"; ctx.textAlign="left"; ctx.fillText(" pick", X(s.m)+5, Y(s.m));
+  ctx.fillStyle="#36b6c8"; ctx.textAlign="left"; ctx.fillText(isTop?" world":" target", X(y)+9, Y(y));
   // legend (plain words + a colour glyph for each mark, so the picture reads cold)
   ctx.font="10px monospace"; ctx.textBaseline="middle";
   function key(yy, draw, txt){ draw(yy); ctx.fillStyle="#8da2b2"; ctx.textAlign="left"; ctx.fillText(txt, 30, yy); }
@@ -404,9 +412,10 @@ function drawChannel(cv, lv, target, isTop){
   key(h-40, function(yy){ ctx.fillStyle="rgba(170,194,212,.95)"; ctx.beginPath(); ctx.arc(16,yy,5,0,2*Math.PI); ctx.fill(); ctx.strokeStyle="rgba(210,226,238,.9)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(16,yy,7,0,2*Math.PI); ctx.stroke(); }, "leader (the winner)");
   key(h-26, function(yy){ ctx.fillStyle="#ffb000"; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.fill(); }, "m = this level's pick");
   key(h-12, function(yy){ ctx.strokeStyle="#36b6c8"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(16,yy,4.5,0,2*Math.PI); ctx.stroke(); }, isTop?"y = the world":"target = level above");
-  // gap between guess and world = tracking error
+  // gap between guess and world = tracking error; label it nearer the world end
+  // so it clears the leader ring when m and the winner cluster together.
   if(dist(s.m,y)>0.18){
-    var mxp=(X(s.m)+X(y))/2, myp=(Y(s.m)+Y(y))/2;
+    var mxp=X(s.m)*0.35+X(y)*0.65, myp=Y(s.m)*0.35+Y(y)*0.65;
     ctx.fillStyle="rgba(54,182,200,.7)"; ctx.font="9px monospace"; ctx.textAlign="center";
     ctx.fillText("gap = error", mxp, myp-6);
   }
@@ -623,7 +632,7 @@ function levelName(k){ return k===0 ? "level n (top)" : (k===levels.length-1 ? "
 function evidence(time){
   // the world drifts slowly enough that a healthy field keeps continuous lock;
   // two close frequencies make a slow Lissajous wander (not a trivial circle).
-  return [P.yR*Math.cos(0.05*time)+yJump[0], P.yR*Math.sin(0.063*time)+yJump[1]];
+  return [P.yR*Math.cos(0.035*time)+yJump[0], P.yR*Math.sin(0.044*time)+yJump[1]];
 }
 
 // rolling buffers. A long trace history so a regime has room to play out
