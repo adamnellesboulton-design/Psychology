@@ -137,10 +137,11 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
         <p class="note">Per-level faults, set on the viewed level (drill with the layer picker above). G-collapse at the top &rarr; schizophrenia. The FILL homeostat has two faults (siblings): damping kP at the top &rarr; bipolar; averaging clock tauW short at n-1 &rarr; ADHD. A lesion deeper than n-1 is absorbed before it reaches the top.</p>
       </div>
       <div class="group">
-        <h2>Environment <span class="tag">volatility &amp; tilt</span></h2>
+        <h2>Environment <span class="tag">volatility, tilt &amp; clarity</span></h2>
         <div class="ctl" id="ctl-chaos"></div>
         <div class="ctl" id="ctl-env"></div>
-        <p class="note">Chaos is the environment's volatility &mdash; the amplitude of the always-on noise on the fill and on the world reading. 1x is the calibrated baseline; turn it up to see how a turbulent environment stresses each regime's stability. Feast vs famine is the tilt on that environment: feast (+) lifts the fill (manic), famine (-) lowers it (depressed), 0 is neutral. Mood tracks the fill; bipolar swings between the two poles.</p>
+        <div class="ctl" id="ctl-yR"></div>
+        <p class="note">Chaos is the environment's volatility &mdash; the amplitude of the always-on noise on the fill and on the world reading. 1x is the calibrated baseline; turn it up to stress a regime's stability. Feast vs famine is the tilt on that environment: feast (+) lifts the fill (manic), famine (-) lowers it (depressed), 0 is neutral; mood tracks the fill. Evidence clarity is how decisively the world points at a coalition: high = a clear winner; low = an ambiguous field equidistant from competitors. Low clarity is the uncertainty that exposes weak binding &mdash; autism's coherence deficit (low G) only sags the field when the field is ambiguous, i.e. when binding is needed.</p>
       </div>
       <div class="group">
         <h2>World &amp; run</h2>
@@ -232,9 +233,9 @@ var CONFIG = {
 };
 // slider metadata: healthy resting value (for the band marker) and range, per
 // control that has a slider (G, kP, chaos, env, speed). G/kP are per-level.
-var HEALTHY = {G:1.0, kP:1.0, tauW:1.0, env:0.0, chaos:1.0};
+var HEALTHY = {G:1.0, kP:1.0, tauW:1.0, env:0.0, chaos:1.0, yR:0.85};
 var RANGES = {
-  G:[0.05,8.0], kP:[0.02,2.0], tauW:[0.1,1.5], env:[-1,1], chaos:[0,4], speed:[0.1,4]
+  G:[0.05,8.0], kP:[0.02,2.0], tauW:[0.1,1.5], env:[-1,1], chaos:[0,4], yR:[0.1,1.0], speed:[0.1,4]
 };
 
 function randn(){ // Box-Muller
@@ -584,6 +585,7 @@ slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the view
 slider(el("ctl-tauW"),"tauW","Averaging clock","tauW",f2,"PER LEVEL (set on the viewed level). The fill homeostat's averaging window (one clock for its bar, its scoring horizon, and its read of the level below). 1 = healthy; drag DOWN to run the clock short. Short clock at n-1 = ADHD: the level forgets fast, the fill hugs setpoint (variance DOWN, decorrelated -- the opposite fingerprint to bipolar's damping break), and the fast jitter is low-passed by the slower levels above, so it stays contained. Sibling of kP on the one homeostat (clock vs damping).");
 slider(el("ctl-chaos"),"chaos","Chaos","x",function(x){return x.toFixed(2)+"x";},"");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
+slider(el("ctl-yR"),"yR","Evidence clarity","yR",function(x){return x.toFixed(2)+(x>0.65?"  decisive":x<0.35?"  ambiguous":"  mixed");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
 
 // layer picker -> which level of the stack the panels drill into

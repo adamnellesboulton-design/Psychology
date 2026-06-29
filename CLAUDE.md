@@ -68,7 +68,12 @@ under clear input, pronounced under ambiguous (H 0.38→0.26). (`kP` floor is
 small-positive: exactly 0 is undamped and blows up.)
 
 Plus the environment: `chaos` scales the external noise (volatility); `env` is
-the feast/famine tilt on it (`env` > 0 floods/manic, `env` < 0 starves/depressed).
+the feast/famine tilt on it (`env` > 0 floods/manic, `env` < 0 starves/depressed);
+`yR` is **evidence clarity** (the evidence radius) — high = a decisive winner,
+low = an ambiguous central field. Low `yR` is the uncertainty that exposes weak
+binding: autism's H-sag (low `G`) appears only when the field is ambiguous (gap
+healthy 0.38 vs autism 0.25 at `yR=0.15`, vs ~0.05 at default). It is INPUT
+ambiguity, not noise — `chaos` does NOT reproduce it (noise is smoothed away).
 
 The fill pair are siblings on one homeostat: `kP` is its **damping**, `tauW` its
 **averaging clock**; they cross-dissociate (A-vs-B protocol below). The division

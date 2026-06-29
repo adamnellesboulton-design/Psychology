@@ -100,6 +100,14 @@ tested and found not to be separable from `G`; it is not on the board.)
   fill level along this axis: feast (+) lifts it (manic), famine (−) lowers it
   (depressed), 0 is neutral. The bipolar limit cycle is exactly this level
   swinging between the two poles.
+- **Evidence clarity `yR`** is how decisively the world points at a coalition —
+  the radius of the moving evidence. High = a clear winner near the ring; low =
+  an **ambiguous** field sitting central, equidistant from competitors. This is
+  the *uncertainty that exposes weak binding*: autism's coherence deficit (low
+  `G`) only sags the field when clarity is low, i.e. when binding is actually
+  needed. (Note this is **input ambiguity**, not noise — turning `chaos` up does
+  *not* reproduce it; the homeostat smooths noise away, but an undecided field
+  genuinely requires binding to resolve.)
 
 ## Layers (the nested stack)
 
