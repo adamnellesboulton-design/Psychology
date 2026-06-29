@@ -224,12 +224,12 @@ var CONFIG = {
                       // misestimate persists before it drifts. Longer = smoother/slower.
   // diagnostics thresholds (one place; tunable)
   band:0.40,          // euthymic half-band on F
-  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.60, propThresh:0.25,
+  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.25,
   ewsWin:300
 };
 var HEALTHY = {G:1.0, kP:1.0, delta:1.0, phi:1.0, env:0.0, chaos:1.0};
 var RANGES = {
-  G:[0.05,8.0], kP:[0.0,2.0], delta:[0.05,1.0], phi:[0.0,2.0], env:[-1,1], chaos:[0,4], speed:[0.1,4]
+  G:[0.05,8.0], kP:[0.02,2.0], delta:[0.05,1.0], phi:[0.0,2.0], env:[-1,1], chaos:[0,4], speed:[0.1,4]
 };
 
 function randn(){ // Box-Muller
@@ -455,50 +455,48 @@ function clear(ctx,w,h){ ctx.fillStyle="#0a0f15"; ctx.fillRect(0,0,w,h); }
 // shared y-axis ceiling for the fill (gauge and trace), so both read at one scale
 function fillAxisMax(P){ return Math.max(2.6, P.Fstar+1.8); }
 
-// scrolling traces for the viewed level: its dominance H, tracking error, and
-// its own fill F (each level has its own fill)
+// scrolling traces for the viewed level: fill F, dominance H, tracking error,
+// and the emergent averaging horizon -- each in its OWN stacked sub-graph (its
+// own vertical scale), so a small signal isn't swamped by a large one.
 function drawTraces(cv, buf, P, viewLevel){
   var ctx=fitCanvas(cv), w=cv.clientWidth, h=cv.clientHeight; clear(ctx,w,h);
   if(w<40||h<40) return;
-  var pad=6, top=24, H=h-top-6, x0=pad, gutter=122, x1=w-pad-gutter;
-  // grid
-  ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
-  for(var g=0;g<=4;g++){ var gy=top+H*g/4; ctx.beginPath(); ctx.moveTo(x0,gy); ctx.lineTo(x1,gy); ctx.stroke(); }
+  var pad=6, top=18, x0=pad, gutter=122, x1=w-pad-gutter;
   var Fv=buf.F[viewLevel], Hv=buf.H[viewLevel], errV=buf.err[viewLevel];
   var N=Fv.length; if(N<2) return;
-  function plot(arr, lo, hi, col){
-    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
-    var lastY=top, M=arr.length, off=M-N;
-    for(var i=0;i<N;i++){
-      var v=(arr[i+off]-lo)/(hi-lo); v=v<0?0:(v>1?1:v);
-      var x=x0+(x1-x0)*i/(N-1), y=top+H*(1-v);
-      if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      lastY=y;
-    }
-    ctx.stroke();
-    return lastY;
-  }
   var Fmax=fillAxisMax(P);
   var hznRaw=buf.hzn[viewLevel], hznMax=P.tau0/clockRate(0)*1.25;   // horizon scale (top baseline is longest)
   var hznV=new Array(hznRaw.length); for(var hi=0;hi<hznRaw.length;hi++) hznV[hi]=rollAt(hznRaw,hi,10);  // 10-tick rolling avg
-  // each line, then a label parked at the line's right-hand end, in its colour
-  var labels=[];
-  labels.push({end:plot(Fv, 0, Fmax, "#37d27a"),  col:"#37d27a", txt:"fill F"});
-  labels.push({end:plot(Hv, 0, 1, "#ffb000"),        col:"#ffb000", txt:"dominance H"});
-  labels.push({end:plot(errV, 0, 1.8, "#36b6c8"),    col:"#36b6c8", txt:"tracking error"});
-  labels.push({end:plot(hznV, 0, hznMax, "#b08cc0"), col:"#b08cc0", txt:"avg horizon tau"});
-  // label y starts at the line end, then de-overlap vertically (keeps `end` for the connector)
-  labels.sort(function(a,b){return a.end-b.end;});
-  for(var i=0;i<labels.length;i++){ labels[i].ly = i===0 ? labels[i].end : Math.max(labels[i].end, labels[i-1].ly+13); }
-  if(labels.length){ var over=labels[labels.length-1].ly-(top+H-2); if(over>0){ for(i=0;i<labels.length;i++) labels[i].ly-=over; } }
-  ctx.font="10px monospace"; ctx.textAlign="left"; ctx.textBaseline="middle";
-  var lx=x1+10;
-  for(i=0;i<labels.length;i++){
-    var L=labels[i];
-    ctx.strokeStyle=L.col; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(x1, L.end); ctx.lineTo(lx-4, L.ly); ctx.stroke();
-    ctx.fillStyle=L.col; ctx.fillRect(lx, L.ly-1.5, 7, 3);
-    ctx.fillText(L.txt, lx+11, L.ly);
+  var series=[
+    {arr:Fv,   lo:0, hi:Fmax,   col:"#37d27a", txt:"fill F"},
+    {arr:Hv,   lo:0, hi:1,      col:"#ffb000", txt:"dominance H"},
+    {arr:errV, lo:0, hi:1.8,    col:"#36b6c8", txt:"tracking error"},
+    {arr:hznV, lo:0, hi:hznMax, col:"#b08cc0", txt:"avg horizon tau"}
+  ];
+  var nB=series.length, gap=11, totalH=h-top-6, bh=(totalH-gap*(nB-1))/nB;
+  ctx.font="10px monospace"; ctx.textBaseline="middle";
+  for(var s=0;s<nB;s++){
+    var S=series[s], bTop=top+s*(bh+gap), bBot=bTop+bh;
+    // band frame: faint top & bottom rules + a mid gridline
+    ctx.strokeStyle="#0e1c24"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x0,bTop); ctx.lineTo(x1,bTop); ctx.moveTo(x0,bBot); ctx.lineTo(x1,bBot);
+    ctx.moveTo(x0,(bTop+bBot)/2); ctx.lineTo(x1,(bTop+bBot)/2); ctx.stroke();
+    // the series, scaled into its own band
+    ctx.strokeStyle=S.col; ctx.lineWidth=1.4; ctx.beginPath();
+    var M=S.arr.length, off=M-N;
+    for(var i=0;i<N;i++){
+      var v=(S.arr[i+off]-S.lo)/(S.hi-S.lo); v=v<0?0:(v>1?1:v);
+      var x=x0+(x1-x0)*i/(N-1), y=bBot-bh*v;
+      if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    // label + this band's scale range in the gutter
+    ctx.textAlign="left";
+    ctx.fillStyle=S.col; ctx.fillRect(x1+10, (bTop+bBot)/2-1.5, 7, 3);
+    ctx.fillText(S.txt, x1+21, (bTop+bBot)/2);
+    ctx.fillStyle="#5d7180";
+    ctx.fillText(S.hi.toFixed(S.hi<3?1:0), x1+21, bTop+5);
+    ctx.fillText(S.lo.toFixed(0), x1+21, bBot-5);
   }
   ctx.textBaseline="alphabetic";
 }
@@ -511,23 +509,30 @@ var P=Object.assign({}, CONFIG);
 // last is the bottom (the nucleus, fast, end-effector). Evidence flows down (a
 // level tracks the one ABOVE); supply rises up (its fill is disturbed by the one
 // below). Each carries its own fill, with per-level damping kP (the lesion site).
-var levels=[]; for(var _k=0;_k<P.levels;_k++) levels.push(initLevel(P, _k*1.7+0.4));
+// fresh randomness every run: a random rotation of the whole coalition ring at
+// startup (so the bids start in a different configuration each load), and a
+// random starting phase for the world wander below. The per-tick noise is
+// already fresh (Math.random); these randomize the INITIAL CONDITIONS so two
+// runs actually diverge instead of retracing the same deterministic path.
+var uRot=Math.random()*2*Math.PI;
+var levels=[]; for(var _k=0;_k<P.levels;_k++) levels.push(initLevel(P, _k*1.7+0.4 + uRot));
 var viewLevel=0;                 // which level the panels are drilled into
 var t=0, speed=1, paused=false;
 var yJump=[0,0];
+var yPh=[Math.random()*2*Math.PI, Math.random()*2*Math.PI];   // random world starting phase
 function levelName(k){ return k===0 ? "level n (top)" : (k===levels.length-1 ? "cellular (bottom)" : "level n-"+k); }
 
 function evidence(time){
   // the world drifts slowly enough that a healthy field keeps continuous lock;
   // two close frequencies make a slow Lissajous wander (not a trivial circle).
-  return [P.yR*Math.cos(0.035*time)+yJump[0], P.yR*Math.sin(0.044*time)+yJump[1]];
+  return [P.yR*Math.cos(0.035*time+yPh[0])+yJump[0], P.yR*Math.sin(0.044*time+yPh[1])+yJump[1]];
 }
 
 // rolling buffers. A long trace history so a regime has room to play out
 // (several bipolar cycles, the slow evidence wander) before it scrolls off.
 // F, H and err are all kept per level (so drilling into a level shows its own
 // history). ews drives the classifier off the top level.
-var BUFLEN=4200;
+var BUFLEN=8400;   // trace window length (samples); ~2x the prior window
 var buf={F:[], H:[], err:[], hzn:[]};   // F[k], H[k], err[k], hzn[k] per level (hzn = emergent horizon)
 for(var _b=0;_b<P.levels;_b++){ buf.F.push([]); buf.H.push([]); buf.err.push([]); buf.hzn.push([]); }
 var ewsH=[], ewsF=[];               // top-level H and fill F, for the classifier
@@ -562,7 +567,7 @@ function slider(host, key, label, sym, fmt, hint){
 
 var f2=function(x){return x.toFixed(2);};
 slider(el("ctl-G"),"G","Coherence gain","G",f2,"PER LEVEL (set on the viewed level). The binding toward consensus. Too high: the winner freezes into a self-confirming monopoly, decoupled from y -- at the TOP that is schizophrenia (delusion), at n-1 it is autism (rigid, locked onto its reading). Too low: no coherent winner (disorganized).");
-slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). To 0: the fill loses its damping and swings (the break). At the TOP it propagates to a global mood swing (bipolar); at n-1 it is a contained, fast, local oscillation (ADHD). A break deeper than n-1 is absorbed before it expresses.");
+slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). Toward its minimum the fill loses its damping and swings -- a bounded limit cycle (the break). At the TOP that is a global mood swing (bipolar); at n-1 it starts contained, then the slow n-1 swing leaks UP and decompensates to the top over time (ADHD). The floor is a small positive value: exactly 0 is undamped and blows up rather than settling to the cycle.");
 slider(el("ctl-chaos"),"chaos","Chaos","x",function(x){return x.toFixed(2)+"x";},"");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
