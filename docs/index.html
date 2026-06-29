@@ -149,14 +149,10 @@ input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%; 
 
     <aside id="side">
       <div class="group">
-        <h2>Malfunctions <span class="tag">loop integrity</span></h2>
+        <h2>Malfunctions <span class="tag">two faults x depth</span></h2>
         <div class="ctl" id="ctl-G"></div>
         <div class="ctl" id="ctl-kP"></div>
-      </div>
-      <div class="group">
-        <h2>Miscalibrations <span class="tag">dial settings</span></h2>
-        <div class="ctl" id="ctl-delta"></div>
-        <div class="ctl" id="ctl-phi"></div>
+        <p class="note">Two faults, located by depth: set on the viewed level (drill with the layer picker above). Division gain G at the top &rarr; schizophrenia, at n-1 &rarr; autism. Fill damping kP at the top &rarr; bipolar, at n-1 &rarr; ADHD. A lesion deeper than n-1 is absorbed before it reaches the top, so it never expresses.</p>
       </div>
       <div class="group">
         <h2>Environment <span class="tag">fitness, surplus vs deficit</span></h2>
@@ -203,7 +199,7 @@ var CONFIG = {
   // shortens it on a chosen level so that level tracks too fast to hold a thread.
   // delta + tauMin/tauMax remain only for the isolated SINGLE-level core, where a
   // level has no neighbour to couple to and its horizon is genuinely free.
-  tau0:3.6, cw0:1.0,
+  tau0:3.6,
   delta:0.6, s:0.8, rho0:1.0, rhoMin:0.05,
   epi:0.35,           // epistemic weight in the precision objective (A.7): a channel
                       // that dissents from the consensus keeps a precision floor, so
@@ -252,18 +248,15 @@ function makeU(n, seed){
 function initLevel(P, seed){
   var n=P.n, p=new Float64Array(n), rho=new Float64Array(n);
   for(var i=0;i<n;i++){ p[i]=1/n; rho[i]=P.rho0; }
+  // G (coherence gain) and kP (fill damping) are PER LEVEL -- the two malfunction
+  // sites. A lesion is read by its level and depth: G-collapse / kP-break at the
+  // top is schizophrenia / bipolar; at n-1 it is autism / ADHD.
   return {p:p, rho:rho, yhat:[0,0], m:[0,0], pibar:0, u:makeU(n, seed),
-          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, kP:P.kP, cw:P.cw0, Fsupply:P.Fstar};
+          F:P.Fstar, z:0, Fset:P.Fstar, theta:0, G:P.G, kP:P.kP, Fsupply:P.Fstar};
 }
 // clocks lengthen upward: each level a fixed factor slower than the one below
 // (bottom = 1, top = clockSlow^(levels-1)). Applied as a per-level dt scale.
 function clockRate(k){ return Math.pow(P.clockSlow, (P.levels-1)-k); }
-// the level's EFFECTIVE clock, with its coupling-window setting cw folded in. cw
-// = 1 is the matched gradient; cw < 1 speeds the level up (compresses its
-// separation from the level below) so it reconfigures too fast to hold a thread
-// -- ADHD, located at a level. The scoring horizon (tau0 / effClock) falls out
-// of this same clock, so window and horizon stay tied by construction.
-function effClock(levels, k){ return clockRate(k) / levels[k].cw; }
 
 // preallocated scratch (no per-frame alloc in the hot path)
 var _pi=null, _dp=null, _drho=null;
@@ -294,7 +287,7 @@ function stepDivision(lv, P, y, dt){
   for(i=0;i<n;i++){
     var ddm=(u[i][0]-mx)*(u[i][0]-mx)+(u[i][1]-my)*(u[i][1]-my);
     var ddy=(u[i][0]-lv.yhat[0])*(u[i][0]-lv.yhat[0])+(u[i][1]-lv.yhat[1])*(u[i][1]-lv.yhat[1]);
-    _pi[i]=-0.5*P.G*lv.rho[i]*ddm - 0.5*P.lambda*ddy - P.c*lv.p[i] + P.sigmaPi*randn();
+    _pi[i]=-0.5*lv.G*lv.rho[i]*ddm - 0.5*P.lambda*ddy - P.c*lv.p[i] + P.sigmaPi*randn();
     pibar+=lv.p[i]*_pi[i];
   }
   for(i=0;i<n;i++){
@@ -368,12 +361,12 @@ function stepFill(lv, P, below, dt){
 function stepStack(levels, P, y, dt){
   var L=levels.length, k, sdt;
   for(k=0; k<L; k++){                                  // evidence DOWN: top reads world
-    sdt=dt*effClock(levels, k);                        // per-level clock (gradient + cw)
+    sdt=dt*clockRate(k);                               // per-level clock (gradient)
     var target = (k===0) ? y : levels[k-1].m;          // others read the level above
     stepDivision(levels[k], P, target, sdt);
   }
   for(k=L-1; k>=0; k--){                               // supply UP: fill driven from below
-    sdt=dt*effClock(levels, k);
+    sdt=dt*clockRate(k);
     var below = (k===L-1) ? null : levels[k+1];
     stepFill(levels[k], P, below, sdt);
   }
@@ -727,14 +720,14 @@ function slider(host, key, label, sym, fmt, hint){
     +'<div class="track"><div class="healthy" id="hb_'+key+'"></div></div>'
     +(hint?'<div class="hint">'+hint+'</div>':'');
   var inp=el("s_"+key), val=el("v_"+key);
-  // kP (the lesion site) and delta (the coupling window) are PER LEVEL: they
-  // read/write the currently viewed level, not a global scalar.
-  function cur(){ return key==="speed"?speed : key==="kP"?levels[viewLevel].kP : key==="delta"?levels[viewLevel].cw : P[key]; }
+  // G (coherence gain) and kP (fill damping) are the PER-LEVEL malfunction sites:
+  // they read/write the currently viewed level, not a global scalar.
+  function cur(){ return key==="speed"?speed : key==="G"?levels[viewLevel].G : key==="kP"?levels[viewLevel].kP : P[key]; }
   inp.value = cur();
   function show(){ val.textContent = fmt(cur()); }
   inp.addEventListener("input", function(){
     var v=parseFloat(inp.value);
-    if(key==="speed") speed=v; else if(key==="kP") levels[viewLevel].kP=v; else if(key==="delta") levels[viewLevel].cw=v; else P[key]=v;
+    if(key==="speed") speed=v; else if(key==="G") levels[viewLevel].G=v; else if(key==="kP") levels[viewLevel].kP=v; else P[key]=v;
     show();
   });
   show();
@@ -746,25 +739,24 @@ function slider(host, key, label, sym, fmt, hint){
 }
 
 var f2=function(x){return x.toFixed(2);};
-slider(el("ctl-G"),"G","Integrating gain","G",f2,"too high: winner freezes, decouples from y (delusion). too low: winner wanders (disorganized).");
-slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). To 0: the fill loses its damping and swings (the break). Inject at the top -> propagates (bipolar); at the bottom -> contained (ADHD-like). The swing low-passes up the slow stack.");
-slider(el("ctl-delta"),"delta","Coupling window","d",f2,"PER LEVEL (set on the viewed level). The scoring horizon falls out of the stack's clock gradient; this is that level's coupling window as a fraction of the matched value (1.0 = matched). Shorten it and the level tracks its target too fast to hold a thread (ADHD), located at a level. Sibling of kP -- the two faults of the one homeostat (window vs damping).");
-slider(el("ctl-phi"),"phi","Precision flexibility","phi",f2,"toward 0: precision frozen, slow to re-track after a context shift (autism).");
+slider(el("ctl-G"),"G","Coherence gain","G",f2,"PER LEVEL (set on the viewed level). The binding toward consensus. Too high: the winner freezes into a self-confirming monopoly, decoupled from y -- at the TOP that is schizophrenia (delusion), at n-1 it is autism (rigid, locked onto its reading). Too low: no coherent winner (disorganized).");
+slider(el("ctl-kP"),"kP","Homeostat damping","kP",f2,"PER LEVEL (set on the viewed level). To 0: the fill loses its damping and swings (the break). At the TOP it propagates to a global mood swing (bipolar); at n-1 it is a contained, fast, local oscillation (ADHD). A break deeper than n-1 is absorbed before it expresses.");
 slider(el("ctl-env"),"env","Feast / famine","env",function(x){return (x>0?"+":"")+x.toFixed(2)+(x>0.05?"  feast":x<-0.05?"  famine":"  neutral");},"");
 slider(el("ctl-speed"),"speed","Speed","x",function(x){return x.toFixed(1)+"x";},"");
 
 // layer picker -> which level of the stack the panels drill into
 function viewNote(k){
-  if(k===0) return "Level n, the top: slow, global, mood. This is the only level that reads the external world, on the longest clock. Its pick propagates DOWN as the target every level below tracks (feedback flows down). The headline regime is read here -- the world-facing level collates the whole stack. A fill break shows here once it has PROPAGATED up from below.";
-  if(k===levels.length-1) return "The bottom: the nucleus, fast and local. It does not see the world -- it tracks the level above (the world's feedback, propagated down) and its throughput feeds the supply of the level above. A fill break here oscillates fast and is usually CONTAINED -- low-passed by the slow levels above before it reaches the top (ADHD-like).";
-  return "Level n-"+k+": a middle contest, tracking the level above (feedback from the world coming down) and feeding its supply up to the level above, on a clock between fast (bottom) and slow (top). Damp it well and it absorbs a break rising from below; weaken it and the break passes through.";
+  if(k===0) return "Level n, the top: slow, global, mood, the only level that reads the external world. The gross disorders express HERE: G-collapse -> schizophrenia (a self-confirming monopoly decoupled from the world), kP-break -> bipolar (a global mood swing). Its pick propagates down as the target every level below tracks.";
+  if(k===1) return "Level n-1: the level just under the world-facing top. The trait disorders express HERE: a G-collapse is autism (this contest freezes onto its reading and stops tracking the context above it -- rigid, but contained below the world-facing top, not a gross delusion); a kP-break is ADHD (a fast, contained, local fill oscillation, not a global mood swing).";
+  return "Level n-"+k+": deeper in the stack, fast and local. A lesion here is meant to be ABSORBED before it expresses -- low-passed by the slower, well-damped levels above before it can reach n-1 or the top. Drill in to watch a break here stay contained.";
 }
 function setView(k){
   viewLevel=k; pHist.length=0;   // whisker history is per level; reset on switch
   Array.prototype.forEach.call(el("layers").children, function(b){ b.classList.toggle("active", +b.dataset.layer===k); });
   el("layerNote").textContent=viewNote(k);
-  var kpi=el("s_kP"); if(kpi){ kpi.value=levels[viewLevel].kP; el("v_kP").textContent=f2(levels[viewLevel].kP); }  // kP follows the viewed level
-  var dli=el("s_delta"); if(dli){ dli.value=levels[viewLevel].cw; el("v_delta").textContent=f2(levels[viewLevel].cw); }  // coupling window follows the viewed level
+  // the per-level malfunction dials (G, kP) follow the viewed level
+  var gi=el("s_G"); if(gi){ gi.value=levels[viewLevel].G; el("v_G").textContent=f2(levels[viewLevel].G); }
+  var kpi=el("s_kP"); if(kpi){ kpi.value=levels[viewLevel].kP; el("v_kP").textContent=f2(levels[viewLevel].kP); }
   resizeAll();
 }
 Array.prototype.forEach.call(el("layers").children, function(b){ b.onclick=function(){ setView(+b.dataset.layer); }; });
@@ -840,6 +832,16 @@ function breakReach(){
   for(var k=0;k<levels.length;k++){ if(fillOsc(k)>P.propThresh) return k; }
   return lesion;
 }
+// the division analogue: a G-lesion is a level whose coherence gain has been
+// driven high. Gate the freeze readout on that (a healthy stack never freezes
+// from noise), then report the highest frozen level (H above the collapse
+// threshold). top = schizophrenia (also the headline); n-1 = autism (contained).
+function gLesionLevel(){ var hi=1.8*P.G, b=-1; for(var k=levels.length-1;k>=0;k--){ if(levels[k].G>hi){ b=k; break; } } return b; }
+function freezeReach(){
+  var lesion=gLesionLevel(); if(lesion<0) return -1;
+  for(var k=0;k<levels.length;k++){ if(rollMean(buf.H[k])>P.H_collapse) return k; }
+  return lesion;
+}
 
 // fill OSCILLATION at level k over a long window (slow upper swings need it):
 // amplitude gated by large ALTERNATIONS across a band, so neither a one-time
@@ -875,9 +877,12 @@ function updateDiag(){
   var moodTag = topF>P.Fstar+P.band?" manic" : topF<P.Fstar-P.band?" low" : " in band";
   var reach=breakReach();
   var breakTag = reach<0 ? "none" : (reach===0 ? "PROPAGATED to top" : "contained @ "+(reach===levels.length-1?"bottom":"n-"+reach));
+  var freeze=freezeReach();
+  var freezeTag = freeze<0 ? "none" : (freeze===0 ? "COLLAPSED at top" : "frozen @ "+(freeze===levels.length-1?"bottom":"n-"+freeze));
   var rows=[
     ["viewing", levelName(viewLevel)],
     ["mood F (top)", topF.toFixed(2)+moodTag, (topF>P.Fstar+P.band||topF<P.Fstar-P.band)],
+    ["division freeze", freezeTag, freeze===0],
     ["fill break", breakTag, reach===0]
   ];
   if(sel>=0 && sel<P.n){
