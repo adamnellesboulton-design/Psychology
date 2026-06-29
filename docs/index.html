@@ -206,7 +206,7 @@ var CONFIG = {
   sigmaM:0.02,        // epistemic uncertainty: per-tick wobble in the system's estimate m
   // diagnostics thresholds (one place; tunable)
   band:0.40,          // euthymic half-band on F
-  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.15,
+  H_collapse:0.72, H_scatter:0.22, errLost:1.05, amp_osc:0.45, propThresh:0.25,
   ewsWin:300
 };
 var HEALTHY = {G:1.0, kP:1.0, delta:0.6, phi:1.0, env:0.0};
@@ -754,7 +754,19 @@ function advance(){
 // the highest level (toward the top) a fill break has reached. -1 = no break.
 // The higher it reaches, the more severe: a break that only touches the bottom
 // is contained/local; one that reaches the top is a global mood swing (bipolar).
-function breakReach(){ for(var k=0;k<levels.length;k++){ if(fillOsc(k)>P.propThresh) return k; } return -1; }
+// A fill break is, by definition, a level whose damping kP has been driven low
+// (the lesion). Gate the readout on that: a healthy stack (every kP at its
+// resting value) has NO lesion, so noise that momentarily rings the slow upper
+// levels can never be mistaken for a break. Given a lesion exists, reach is the
+// highest level (smallest index) whose fill is actually oscillating; if the
+// lesion's swing is momentarily sub-threshold, fall back to the lesion level so
+// the readout does not flicker to "none".
+function lesionLevel(){ var lo=0.5*P.kP, b=-1; for(var k=levels.length-1;k>=0;k--){ if(levels[k].kP<lo){ b=k; break; } } return b; }
+function breakReach(){
+  var lesion=lesionLevel(); if(lesion<0) return -1;
+  for(var k=0;k<levels.length;k++){ if(fillOsc(k)>P.propThresh) return k; }
+  return lesion;
+}
 
 function rollAmp(arr, win){ win=win||120; if(arr.length<8) return 0; var lo=Infinity,hi=-Infinity; for(var i=Math.max(0,arr.length-win);i<arr.length;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; } return (hi-lo)/2; }
 // fill OSCILLATION at level k over a long window (slow upper swings need it):
